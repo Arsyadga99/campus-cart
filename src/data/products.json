@@ -1,0 +1,30 @@
+[
+  {
+    "id": 1,
+    "name": "Campus Chicken Rice",
+    "price": 25000,
+    "category": "Food",
+    "description": "Student favorite. Pre-order to get a cheaper price."
+  },
+  {
+    "id": 2,
+    "name": "Stationery Value Pack",
+    "price": 40000,
+    "category": "Study Items",
+    "description": "Includes notebooks, pens, and highlighters."
+  },
+  {
+    "id": 3,
+    "name": "Liquid Body Wash",
+    "price": 30000,
+    "category": "Daily Needs",
+    "description": "Dormitory daily essentials."
+  },
+  {
+    "id": 4,
+    "name": "Iced Milk Coffee",
+    "price": 15000,
+    "category": "Food",
+    "description": "Late-night study companion."
+  }
+]
