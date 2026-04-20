@@ -1,320 +1,321 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
-// === PDF Business Model Constants ===
-const COMMISSION_RATE = 0.10;
-const DELIVERY_CHARGE = 10000;
-const DELIVERY_COST = 8000;
-const DELIVERY_MARGIN = DELIVERY_CHARGE - DELIVERY_COST; // 2,000
-const PAYMENT_FEE = 1500;
-const OPERATIONAL_COST = 2000;
-const PROMO_SUBSIDY = 2500;
-const TOTAL_VARIABLE_COST = PAYMENT_FEE + OPERATIONAL_COST + PROMO_SUBSIDY; // 6,000
-const CONTRIBUTION_MARGIN_PER_ORDER = 7000 - TOTAL_VARIABLE_COST; // 1,000 VND
-const FIXED_MONTHLY_COST = 20_000_000; // 20 million VND
-const BEP_ORDERS = FIXED_MONTHLY_COST / CONTRIBUTION_MARGIN_PER_ORDER; // 20,000 orders
+const COMMISSION_RATE  = 0.10;
+const DELIVERY_MARGIN  = 2000;
+const PAYMENT_FEE      = 1500;
+const OPS_COST         = 2000;
+const PROMO_SUBSIDY    = 2500;
+const TOTAL_VAR        = PAYMENT_FEE + OPS_COST + PROMO_SUBSIDY;
+const FIXED_MONTHLY    = 20_000_000;
+const BEP_ORDERS       = 20_000;
 
-// Scaling phases from PDF
-const SCALING_PHASES = [
-  { campuses: 1,   minOrders: 900,   maxOrders: 2400,   label: 'Phase 1 – Demand Validation' },
-  { campuses: 5,   minOrders: 3000,  maxOrders: 10000,  label: 'Phase 2 – Growth' },
-  { campuses: 10,  minOrders: 10000, maxOrders: 20000,  label: 'Phase 3 – Near Break-Even' },
-  { campuses: 12,  minOrders: 20000, maxOrders: 35000,  label: 'Phase 4 – Profitability' },
+const PHASES = [
+  { label: 'Phase 1', subtitle: 'Demand Validation', campuses: 1,  min: 0,     max: 2400   },
+  { label: 'Phase 2', subtitle: 'Growth',            campuses: 5,  min: 3000,  max: 10000  },
+  { label: 'Phase 3', subtitle: 'Near Break-Even',   campuses: 10, min: 10000, max: 20000  },
+  { label: 'Phase 4', subtitle: 'Profitability',     campuses: 12, min: 20000, max: 35000  },
 ];
 
-function getPhase(orders) {
-  for (let i = SCALING_PHASES.length - 1; i >= 0; i--) {
-    if (orders >= SCALING_PHASES[i].minOrders) return SCALING_PHASES[i];
-  }
-  return SCALING_PHASES[0];
+function currentPhase(orders) {
+  for (let i = PHASES.length - 1; i >= 0; i--)
+    if (orders >= PHASES[i].min) return PHASES[i];
+  return PHASES[0];
+}
+
+/* ─── resolve tab from URL pathname ─── */
+function tabFromPath(path) {
+  if (path === '/admin/orders')    return 'orders';
+  if (path === '/admin/economics') return 'economics';
+  if (path === '/admin/users')     return 'users';
+  return 'overview';
 }
 
 export default function Admin() {
-  const [orders, setOrders] = useState([]);
-  const [activeTab, setActiveTab] = useState('overview');
+  const location = useLocation();
+  const activeTab = tabFromPath(location.pathname);
+
+  const { getAllUsers, getUserOrders } = useAuth();
+  const [allOrders, setAllOrders] = useState([]);
+  const [users, setUsers]         = useState([]);
 
   useEffect(() => {
-    const saved = JSON.parse(localStorage.getItem('orders')) || [];
-    setOrders(saved);
+    const us = getAllUsers();
+    setUsers(us);
+    const orders = us.flatMap(u => getUserOrders(u.id));
+    setAllOrders(orders);
   }, []);
 
-  // === Aggregate Financial Metrics ===
-  const totalOrders = orders.length;
-  const totalGMV = orders.reduce((s, o) => s + (o.subtotal || o.total), 0);
-  const totalCommission = orders.reduce((s, o) => s + (o.commissionRevenue || Math.round((o.subtotal || o.total) * COMMISSION_RATE)), 0);
-  const totalDeliveryMargin = orders.reduce((s, o) => s + (o.deliveryMarginRevenue || 0), 0);
-  const totalPlatformRevenue = totalCommission + totalDeliveryMargin;
-  const totalVariableCosts = totalOrders * TOTAL_VARIABLE_COST;
-  const totalContribution = totalPlatformRevenue - totalVariableCosts;
-  const operatingDeficit = totalContribution - FIXED_MONTHLY_COST;
-  const bepProgress = Math.min(100, (totalOrders / BEP_ORDERS) * 100);
-  const ordersToBreakEven = Math.max(0, BEP_ORDERS - totalOrders);
+  /* ── Metrics ── */
+  const totalOrders   = allOrders.length;
+  const totalGMV      = allOrders.reduce((s, o) => s + (o.subtotal ?? o.total), 0);
+  const totalComm     = allOrders.reduce((s, o) => s + (o.commissionRevenue ?? Math.round((o.subtotal ?? o.total) * COMMISSION_RATE)), 0);
+  const totalDelMarg  = allOrders.reduce((s, o) => s + (o.deliveryMarginRevenue ?? 0), 0);
+  const totalPlatRev  = totalComm + totalDelMarg;
+  const totalVarCost  = totalOrders * TOTAL_VAR;
+  const totalContrib  = totalPlatRev - totalVarCost;
+  const netOperating  = totalContrib - FIXED_MONTHLY;
+  const bepPct        = Math.min(100, (totalOrders / BEP_ORDERS) * 100);
+  const phase         = currentPhase(totalOrders);
 
-  const currentPhase = getPhase(totalOrders);
-
-  const clearData = () => {
-    if (window.confirm('Delete all order data? This cannot be undone.')) {
-      localStorage.removeItem('orders');
-      setOrders([]);
-    }
-  };
+  /* ── KPI Card ── */
+  const KPICard = ({ label, value, note, variant }) => (
+    <div className={`kpi-card ${variant || ''}`}>
+      <div className="kpi-label">{label}</div>
+      <div className="kpi-value" style={{ fontSize: String(value).length > 12 ? 17 : 26 }}>{value}</div>
+      {note && <div className="kpi-note">{note}</div>}
+    </div>
+  );
 
   return (
     <div className="page">
+      {/* Header */}
       <div className="page-header flex-between">
         <div>
-          <h1 className="page-title">📊 Admin Analytics Dashboard</h1>
+          <span className="label-section">// Analytics</span>
+          <h1 className="page-title">Business Dashboard</h1>
           <p className="page-subtitle">
-            CampusCart Business Intelligence — Based on PDF Revenue Model
-            <span className="loyalty-badge" style={{ marginLeft: 12 }}>
-              ⭐ {currentPhase.label}
+            CampusCart revenue intelligence &nbsp;&middot;&nbsp;
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, background: 'var(--cream-dark)', padding: '2px 8px', borderRadius: 2, border: '1px solid var(--border)' }}>
+              {phase.label}: {phase.subtitle}
             </span>
           </p>
         </div>
         <button
-          onClick={clearData}
-          style={{ padding: '10px 20px', background: 'var(--danger)', color: 'white', border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontFamily: 'inherit', fontSize: 14 }}
+          onClick={() => {
+            if (window.confirm('Clear all demo order data?')) {
+              users.forEach(u => localStorage.removeItem(`cc_orders_${u.id}`));
+              setAllOrders([]);
+            }
+          }}
+          style={{ padding: '10px 18px', background: 'none', border: '1px solid var(--danger)', color: 'var(--danger)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontWeight: 700, fontFamily: 'inherit', fontSize: 11, letterSpacing: 1, textTransform: 'uppercase' }}
         >
-          🗑️ Clear Data
+          Clear Data
         </button>
       </div>
 
-      {/* ─── KPI Cards ─── */}
-      <div className="kpi-grid">
-        <div className="kpi-card">
-          <div className="kpi-label">Total Orders</div>
-          <div className="kpi-value">{totalOrders.toLocaleString()}</div>
-          <div className="kpi-note">BEP target: 20,000/month</div>
-        </div>
-        <div className="kpi-card green">
-          <div className="kpi-label">Platform Revenue</div>
-          <div className="kpi-value" style={{ fontSize: totalPlatformRevenue > 999999 ? 20 : 26 }}>
-            {totalPlatformRevenue.toLocaleString('vi-VN')}
-          </div>
-          <div className="kpi-note">Commission + Delivery Margin (VND)</div>
-        </div>
-        <div className="kpi-card yellow">
-          <div className="kpi-label">Total GMV</div>
-          <div className="kpi-value" style={{ fontSize: totalGMV > 999999 ? 20 : 26 }}>
-            {totalGMV.toLocaleString('vi-VN')}
-          </div>
-          <div className="kpi-note">Gross merchandise value (VND)</div>
-        </div>
-        <div className={`kpi-card ${totalContribution >= 0 ? 'green' : 'red'}`}>
-          <div className="kpi-label">Contribution Margin</div>
-          <div className="kpi-value" style={{ fontSize: 20, color: totalContribution >= 0 ? 'var(--accent-dark)' : 'var(--danger)' }}>
-            {totalContribution >= 0 ? '+' : ''}{totalContribution.toLocaleString('vi-VN')}
-          </div>
-          <div className="kpi-note">After variable costs (VND)</div>
-        </div>
-        <div className={`kpi-card ${operatingDeficit >= 0 ? 'green' : 'red'}`}>
-          <div className="kpi-label">vs Fixed Cost</div>
-          <div className="kpi-value" style={{ fontSize: 20, color: operatingDeficit >= 0 ? 'var(--accent-dark)' : 'var(--danger)' }}>
-            {operatingDeficit >= 0 ? '+' : ''}{operatingDeficit.toLocaleString('vi-VN')}
-          </div>
-          <div className="kpi-note">Fixed cost: 20,000,000 VND/month</div>
-        </div>
-        <div className="kpi-card">
-          <div className="kpi-label">Avg Revenue / Order</div>
-          <div className="kpi-value">
-            {totalOrders > 0 ? Math.round(totalPlatformRevenue / totalOrders).toLocaleString('vi-VN') : 0}
-          </div>
-          <div className="kpi-note">Target: 7,000 VND/order</div>
-        </div>
-      </div>
-
-      {/* ─── Break-Even Progress ─── */}
-      <div className="bep-section">
-        <div className="flex-between" style={{ marginBottom: 4 }}>
-          <div style={{ fontWeight: 700, fontSize: 16 }}>📈 Break-Even Progress</div>
-          <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-            {totalOrders.toLocaleString()} / {BEP_ORDERS.toLocaleString()} orders ({bepProgress.toFixed(2)}%)
-          </div>
-        </div>
-        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12 }}>
-          {ordersToBreakEven > 0
-            ? `⚠️ Need ${ordersToBreakEven.toLocaleString()} more orders to reach break-even (BEP = 20,000,000 ÷ 1,000)`
-            : '🎉 Break-even achieved! Platform is now profitable.'}
-        </p>
-        <div className="bep-bar-wrapper">
-          <div className="bep-bar-fill" style={{ width: `${bepProgress}%` }} />
-        </div>
-        <div className="bep-legend">
-          <span>0</span>
-          <span>5,000</span>
-          <span>10,000</span>
-          <span>15,000</span>
-          <span>20,000 (BEP)</span>
-        </div>
-
-        {/* Scaling Phases */}
-        <div style={{ marginTop: 20 }}>
-          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12 }}>🗺️ Scaling Roadmap (from PDF)</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10 }}>
-            {SCALING_PHASES.map((phase, i) => (
-              <div
-                key={i}
-                style={{
-                  padding: '12px 16px',
-                  borderRadius: 10,
-                  border: `1px solid ${currentPhase.campuses === phase.campuses ? 'var(--primary)' : 'var(--border)'}`,
-                  background: currentPhase.campuses === phase.campuses ? 'var(--primary-light)' : 'var(--surface)',
-                }}
-              >
-                <div style={{ fontWeight: 700, fontSize: 13, color: currentPhase.campuses === phase.campuses ? 'var(--primary)' : 'var(--text)' }}>
-                  {currentPhase.campuses === phase.campuses ? '▶ ' : ''}{phase.label}
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
-                  {phase.campuses} campus{phase.campuses > 1 ? 'es' : ''} •{' '}
-                  {phase.minOrders.toLocaleString()}–{phase.maxOrders.toLocaleString()} orders/month
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* ─── Unit Economics Table ─── */}
-      <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 24, marginBottom: 32 }}>
-        <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 16 }}>💹 Unit Economics (Per Order — from PDF Table 1)</div>
-        <table className="econ-table">
-          <thead>
-            <tr>
-              <th>Metric</th>
-              <th>Value</th>
-              <th>Notes</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr><td>Average Order Value</td><td>50,000 VND</td><td>Typical student purchase</td></tr>
-            <tr><td>Commission (10%)</td><td>5,000 VND</td><td>Platform fee per order</td></tr>
-            <tr><td>Net Delivery Margin</td><td>2,000 VND</td><td>Charge 10k, cost 8k</td></tr>
-            <tr><td>Total Revenue / Order</td><td style={{color:'var(--primary)', fontWeight:700}}>7,000 VND</td><td>Platform income per order</td></tr>
-            <tr style={{background:'var(--danger-light)'}}><td>Payment Processing</td><td style={{color:'var(--danger)'}}>−1,500 VND</td><td>Gateway fee</td></tr>
-            <tr style={{background:'var(--danger-light)'}}><td>Operational Handling</td><td style={{color:'var(--danger)'}}>−2,000 VND</td><td>Support & system ops</td></tr>
-            <tr style={{background:'var(--danger-light)'}}><td>Promo Subsidy</td><td style={{color:'var(--danger)'}}>−2,500 VND</td><td>Discounts & incentives</td></tr>
-            <tr><td>Total Variable Costs</td><td style={{color:'var(--danger)', fontWeight:700}}>−6,000 VND</td><td>Per-order costs</td></tr>
-            <tr><td>Contribution Margin</td><td style={{color:'var(--accent-dark)', fontWeight:800, fontSize:16}}>+1,000 VND</td><td>Toward fixed costs</td></tr>
-          </tbody>
-        </table>
-        <div style={{ fontSize: 13, color: 'var(--text-secondary)', background: 'var(--surface)', padding: '12px 16px', borderRadius: 8, border: '1px solid var(--border)' }}>
-          <strong>BEP Formula:</strong> Fixed Cost ÷ Contribution Margin = 20,000,000 ÷ 1,000 = <strong>20,000 orders/month</strong>
-        </div>
-      </div>
-
-      {/* ─── Tabs: Overview vs Orders ─── */}
-      <div className="tabs">
-        <button className={`tab-btn ${activeTab === 'overview' ? 'active' : ''}`} onClick={() => setActiveTab('overview')}>
-          📊 Revenue Breakdown
-        </button>
-        <button className={`tab-btn ${activeTab === 'orders' ? 'active' : ''}`} onClick={() => setActiveTab('orders')}>
-          📦 Order History ({totalOrders})
-        </button>
-      </div>
-
+      {/* ══ OVERVIEW TAB ══ */}
       {activeTab === 'overview' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-          {/* Revenue Sources */}
-          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 20 }}>
-            <div style={{ fontWeight: 700, marginBottom: 14 }}>💰 Revenue Sources</div>
-            <div className="order-row">
-              <span>Commission Revenue (10%)</span>
-              <span style={{ fontWeight: 700, color: 'var(--primary)' }}>{totalCommission.toLocaleString('vi-VN')} VND</span>
+        <>
+          {/* KPIs */}
+          <div className="kpi-grid">
+            <KPICard label="Total Orders"         value={totalOrders.toLocaleString()}             note="BEP target: 20,000/month" />
+            <KPICard label="Platform Revenue"     value={`${totalPlatRev.toLocaleString('vi-VN')} VND`} note="Commission + delivery margin" variant="gold" />
+            <KPICard label="Gross GMV"            value={`${totalGMV.toLocaleString('vi-VN')} VND`}    note="Total merchandise value"     variant="accent" />
+            <KPICard label="Contribution Margin"  value={`${totalContrib >= 0 ? '+' : ''}${totalContrib.toLocaleString('vi-VN')} VND`} note="After variable costs" variant={totalContrib >= 0 ? 'success' : 'danger'} />
+            <KPICard label="Net Operating Result" value={`${netOperating >= 0 ? '+' : ''}${netOperating.toLocaleString('vi-VN')} VND`} note="vs 20M VND fixed cost" variant={netOperating >= 0 ? 'success' : 'danger'} />
+            <KPICard label="Avg Revenue / Order"  value={`${totalOrders > 0 ? Math.round(totalPlatRev / totalOrders).toLocaleString('vi-VN') : 0} VND`} note="Target: 7,000 VND/order" />
+          </div>
+
+          {/* BEP Progress */}
+          <div className="bep-section">
+            <div className="flex-between" style={{ marginBottom: 6 }}>
+              <div>
+                <span className="label-section">// Break-Even Analysis</span>
+                <div className="bep-section-title">Progress to Break-Even</div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{totalOrders.toLocaleString()} / {BEP_ORDERS.toLocaleString()}</div>
+                <div style={{ fontSize: 11, color: 'var(--ink-faint)', marginTop: 2 }}>{bepPct.toFixed(2)}% achieved</div>
+              </div>
             </div>
-            <div className="order-row">
-              <span>Delivery Margin Revenue</span>
-              <span style={{ fontWeight: 700, color: 'var(--primary)' }}>{totalDeliveryMargin.toLocaleString('vi-VN')} VND</span>
-            </div>
-            <div className="order-row" style={{ borderTop: '2px solid var(--border)', paddingTop: 10, marginTop: 6, fontWeight: 800, fontSize: 16 }}>
-              <span>Total Platform Revenue</span>
-              <span style={{ color: 'var(--accent-dark)' }}>{totalPlatformRevenue.toLocaleString('vi-VN')} VND</span>
+            <p style={{ fontSize: 13, color: 'var(--ink-subtle)', marginBottom: 16 }}>
+              {totalOrders < BEP_ORDERS
+                ? `${(BEP_ORDERS - totalOrders).toLocaleString()} more orders needed — BEP = 20,000,000 ÷ 1,000 = 20,000 orders / month`
+                : 'Break-even achieved. Platform is now profitable.'}
+            </p>
+            <div className="bep-bar-wrapper"><div className="bep-bar-fill" style={{ width: `${bepPct}%` }} /></div>
+            <div className="bep-legend"><span>0</span><span>5,000</span><span>10,000</span><span>15,000</span><span>20,000 (BEP)</span></div>
+
+            <div style={{ marginTop: 28 }}>
+              <span className="label-section">// Scaling Roadmap</span>
+              <div className="phase-grid">
+                {PHASES.map((p, i) => (
+                  <div key={i} className={`phase-card ${phase.label === p.label ? 'current' : ''}`}>
+                    <div className="phase-card-label">{phase.label === p.label ? 'Current — ' : ''}{p.label}</div>
+                    <div className="phase-card-title">{p.subtitle}</div>
+                    <div className="phase-card-info">{p.campuses} campus{p.campuses > 1 ? 'es' : ''}<br />{p.min.toLocaleString()}–{p.max.toLocaleString()} orders/mo</div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
-          {/* Cost Breakdown */}
-          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 20 }}>
-            <div style={{ fontWeight: 700, marginBottom: 14 }}>📉 Cost Breakdown</div>
-            <div className="order-row">
-              <span>Variable Costs ({totalOrders} orders × 6,000 VND)</span>
-              <span style={{ fontWeight: 700, color: 'var(--danger)' }}>{totalVariableCosts.toLocaleString('vi-VN')} VND</span>
-            </div>
-            <div className="order-row">
-              <span>Fixed Monthly Cost</span>
-              <span style={{ fontWeight: 700, color: 'var(--danger)' }}>{FIXED_MONTHLY_COST.toLocaleString('vi-VN')} VND</span>
-            </div>
-            <div className="order-row" style={{ borderTop: '2px solid var(--border)', paddingTop: 10, marginTop: 6, fontWeight: 800, fontSize: 16 }}>
-              <span>Net Operating Result</span>
-              <span style={{ color: operatingDeficit >= 0 ? 'var(--accent-dark)' : 'var(--danger)' }}>
-                {operatingDeficit >= 0 ? '+' : ''}{operatingDeficit.toLocaleString('vi-VN')} VND
-              </span>
-            </div>
-          </div>
-
-          {/* Margin Expansion Notes */}
-          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 20, gridColumn: '1 / -1' }}>
-            <div style={{ fontWeight: 700, marginBottom: 14 }}>📈 Margin Expansion Strategy (from PDF §8.1)</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, fontSize: 14 }}>
-              {[
-                { icon: '💰', title: 'Selective Commission Hike', text: 'Premium sellers pay 12–15% commission, without affecting general pricing.' },
-                { icon: '🚚', title: 'Batch Delivery Efficiency', text: 'Group orders by location. Delivery cost drops from 8,000 to 6,000–7,000 VND → margin 3,000–4,000 VND.' },
-                { icon: '📢', title: 'Additional Revenue Streams', text: 'Promoted listings, vendor subscriptions, in-app advertising — independent of order volume.' },
-              ].map((item, i) => (
-                <div key={i} style={{ padding: '14px', background: 'var(--surface)', borderRadius: 10, border: '1px solid var(--border)' }}>
-                  <div style={{ fontSize: 22, marginBottom: 8 }}>{item.icon}</div>
-                  <div style={{ fontWeight: 700, marginBottom: 6 }}>{item.title}</div>
-                  <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{item.text}</div>
-                </div>
+          {/* Revenue vs Cost */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+            <div style={{ background: 'var(--warm-white)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 24 }}>
+              <span className="label-section">// Revenue Sources</span>
+              <h3 style={{ fontFamily: 'var(--font-serif)', marginBottom: 20 }}>Platform Income</h3>
+              {[['Commission (10%)', totalComm], ['Delivery Margin', totalDelMarg]].map(([l, v]) => (
+                <div className="order-row" key={l}><span>{l}</span><span className="font-mono">{v.toLocaleString('vi-VN')} VND</span></div>
               ))}
+              <div className="order-row total"><span>Total Platform Revenue</span><span>{totalPlatRev.toLocaleString('vi-VN')} VND</span></div>
+            </div>
+            <div style={{ background: 'var(--warm-white)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 24 }}>
+              <span className="label-section">// Cost Structure</span>
+              <h3 style={{ fontFamily: 'var(--font-serif)', marginBottom: 20 }}>Cost Breakdown</h3>
+              {[
+                [`Variable Costs (${totalOrders} × 6,000)`, totalVarCost],
+                ['Fixed Monthly Cost', FIXED_MONTHLY],
+              ].map(([l, v]) => (
+                <div className="order-row" key={l}><span>{l}</span><span className="font-mono text-danger">{v.toLocaleString('vi-VN')} VND</span></div>
+              ))}
+              <div className="order-row total"><span>Net Operating Result</span><span className={netOperating >= 0 ? 'text-success' : 'text-danger'}>{netOperating >= 0 ? '+' : ''}{netOperating.toLocaleString('vi-VN')} VND</span></div>
             </div>
           </div>
-        </div>
+        </>
       )}
 
+      {/* ══ ORDERS TAB ══ */}
       {activeTab === 'orders' && (
-        <div>
-          {orders.length === 0 ? (
+        <>
+          <div style={{ marginBottom: 24 }}>
+            <span className="label-section">// All Transactions</span>
+            <h2 style={{ fontFamily: 'var(--font-serif)' }}>Order History</h2>
+            <p style={{ fontSize: 13, color: 'var(--ink-subtle)', marginTop: 4 }}>
+              {allOrders.length} orders across {users.length} registered students.
+            </p>
+          </div>
+          {!allOrders.length ? (
             <div className="empty-state">
-              <div className="emoji">📦</div>
-              <h3>No orders yet</h3>
-              <p>Orders will appear here once students start purchasing.</p>
+              <div className="empty-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+              </div>
+              <h3>No orders recorded</h3>
+              <p>Student transactions will appear here after orders are placed.</p>
             </div>
           ) : (
-            [...orders].reverse().map(o => (
+            [...allOrders].reverse().map(o => (
               <div key={o.id} className="order-card animate-in">
-                <div>
-                  <div className="order-card-id">#{o.id}</div>
-                  <div className="order-card-date">🕐 {o.date}</div>
-                  <div className="order-card-items">
-                    Items: {o.items.map(i => `${i.quantity}× ${i.name}`).join(', ')}
+                <div style={{ flex: 1 }}>
+                  <div className="order-card-id">{o.id}</div>
+                  <div className="order-card-date">{o.date}</div>
+                  <div className="order-card-items" style={{ marginTop: 4 }}>
+                    {o.items.map(i => `${i.quantity}× ${i.name}`).join(', ')}
                   </div>
-                  <div style={{ fontSize: 12, marginTop: 6, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                    <span style={{ color: 'var(--primary)', fontWeight: 600 }}>
-                      📦 {o.deliveryMethod === 'delivery' ? 'Dormitory Delivery' : 'Campus Pickup'}
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--ink-subtle)', padding: '2px 8px', background: 'var(--cream)', border: '1px solid var(--border-light)', borderRadius: 2 }}>
+                      {o.deliveryMethod === 'delivery' ? 'Dormitory Delivery' : 'Campus Pickup'}
                     </span>
-                    <span style={{ color: 'var(--text-secondary)' }}>
-                      💳 {o.paymentMethod?.toUpperCase()}
+                    <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--ink-subtle)', padding: '2px 8px', background: 'var(--cream)', border: '1px solid var(--border-light)', borderRadius: 2, textTransform: 'uppercase' }}>
+                      {o.paymentMethod}
                     </span>
-                    {o.promoDiscount > 0 && (
-                      <span style={{ color: 'var(--accent-dark)', fontWeight: 600 }}>
-                        🎁 Promo: −{o.promoDiscount?.toLocaleString('vi-VN')} VND
-                      </span>
-                    )}
                   </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--text)' }}>
-                    {(o.total || o.subtotal).toLocaleString('vi-VN')} VND
+                  <div style={{ fontFamily: 'var(--font-serif)', fontWeight: 700, fontSize: 18, color: 'var(--ink)' }}>
+                    {(o.total ?? o.subtotal).toLocaleString('vi-VN')} VND
                   </div>
-                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>Paid by customer</div>
-                  <div style={{ marginTop: 8 }}>
-                    <span className="order-badge">
-                      Platform: +{(o.platformRevenue || o.commissionRevenue || Math.round((o.subtotal || o.total) * 0.1)).toLocaleString('vi-VN')} VND
-                    </span>
+                  <div className="order-badge" style={{ marginTop: 10 }}>
+                    Platform +{(o.platformRevenue ?? o.commissionRevenue ?? Math.round((o.subtotal ?? o.total) * 0.1)).toLocaleString('vi-VN')} VND
                   </div>
                 </div>
               </div>
             ))
           )}
-        </div>
+        </>
+      )}
+
+      {/* ══ UNIT ECONOMICS TAB ══ */}
+      {activeTab === 'economics' && (
+        <>
+          <div style={{ marginBottom: 24 }}>
+            <span className="label-section">// PDF Table 1</span>
+            <h2 style={{ fontFamily: 'var(--font-serif)' }}>Unit Economics — Per Order</h2>
+          </div>
+          <div style={{ background: 'var(--warm-white)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 28, marginBottom: 24 }}>
+            <table className="econ-table">
+              <thead>
+                <tr><th>Metric</th><th>Value</th><th>Notes</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Average Order Value</td><td className="mono">50,000 VND</td><td>Typical student purchase</td></tr>
+                <tr><td>Commission (10%)</td><td className="mono">5,000 VND</td><td>Platform fee per order</td></tr>
+                <tr><td>Net Delivery Margin</td><td className="mono">2,000 VND</td><td>Charge 10k, cost 8k to vendor</td></tr>
+                <tr className="row-total"><td className="bold">Total Revenue / Order</td><td className="mono bold">7,000 VND</td><td>Platform income</td></tr>
+                <tr className="row-cost"><td>Payment Processing</td><td className="neg">−1,500 VND</td><td>Gateway fee</td></tr>
+                <tr className="row-cost"><td>Operational Handling</td><td className="neg">−2,000 VND</td><td>Support and system ops</td></tr>
+                <tr className="row-cost"><td>Promo Subsidy</td><td className="neg">−2,500 VND</td><td>Discounts and incentives</td></tr>
+                <tr className="row-total"><td className="bold">Total Variable Costs</td><td className="neg bold">−6,000 VND</td><td>Sum of per-order costs</td></tr>
+                <tr><td className="bold" style={{ fontSize: 15 }}>Contribution Margin</td><td className="pos" style={{ fontSize: 15 }}>+1,000 VND</td><td>Applied toward fixed costs</td></tr>
+              </tbody>
+            </table>
+            <div style={{ marginTop: 16, padding: '12px 16px', background: 'var(--cream)', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', fontSize: 12, color: 'var(--ink-subtle)', fontFamily: 'var(--font-mono)' }}>
+              BEP = Fixed Cost / Contribution Margin = 20,000,000 / 1,000 = <strong style={{ color: 'var(--ink)' }}>20,000 orders / month</strong>
+            </div>
+          </div>
+          {/* Margin Strategy */}
+          <div style={{ marginBottom: 16 }}>
+            <span className="label-section">// Section 8.1</span>
+            <h3 style={{ fontFamily: 'var(--font-serif)', fontSize: 18, marginBottom: 6 }}>Margin Expansion Strategy</h3>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+            {[
+              { num: '01', title: 'Selective Commission Escalation', body: 'Premium sellers pay 12–15% commission without affecting general pricing. Increases per-transaction revenue with no student impact.', metric: '12–15% on premium sellers' },
+              { num: '02', title: 'Batch Delivery Efficiency', body: 'Consolidated delivery routes reduce cost per order from 8,000 to 6,000–7,000 VND, expanding delivery margin by 1,000–2,000 VND.', metric: '+1,000–2,000 VND margin/order' },
+              { num: '03', title: 'Non-Transactional Revenue', body: 'Promoted listings, vendor subscription tiers, and in-app placement fees provide revenue independent of order volume.', metric: 'Subscriptions + ad placements' },
+            ].map(s => (
+              <div key={s.num} style={{ background: 'var(--warm-white)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 24 }}>
+                <div style={{ fontFamily: 'var(--font-serif)', fontSize: 28, fontWeight: 700, color: 'var(--border)', marginBottom: 10, lineHeight: 1 }}>{s.num}</div>
+                <div className="label-section">Strategy {s.num}</div>
+                <div style={{ fontFamily: 'var(--font-serif)', fontSize: 15, fontWeight: 600, color: 'var(--ink)', marginBottom: 8 }}>{s.title}</div>
+                <div style={{ fontSize: 13, color: 'var(--ink-subtle)', lineHeight: 1.6, marginBottom: 14 }}>{s.body}</div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--gold)', background: 'var(--gold-pale)', padding: '6px 12px', borderRadius: 2, border: '1px solid var(--gold-light)', display: 'inline-block' }}>{s.metric}</div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* ══ STUDENTS TAB ══ */}
+      {activeTab === 'users' && (
+        <>
+          <div style={{ marginBottom: 24 }}>
+            <span className="label-section">// Student Registry</span>
+            <h2 style={{ fontFamily: 'var(--font-serif)' }}>Registered Students</h2>
+            <p style={{ fontSize: 13, color: 'var(--ink-subtle)', marginTop: 4 }}>
+              {users.length} student{users.length !== 1 ? 's' : ''} registered on the platform.
+            </p>
+          </div>
+          {!users.length ? (
+            <div className="empty-state">
+              <h3>No students yet</h3>
+              <p>Registered student accounts will appear here.</p>
+            </div>
+          ) : (
+            <div style={{ background: 'var(--warm-white)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
+              <table className="econ-table" style={{ marginBottom: 0 }}>
+                <thead>
+                  <tr>
+                    <th>Student</th>
+                    <th>Email</th>
+                    <th>Registered</th>
+                    <th>Orders</th>
+                    <th>Total Spent</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map(u => {
+                    const uOrders = getUserOrders(u.id);
+                    const spent = uOrders.reduce((s, o) => s + (o.total ?? o.subtotal), 0);
+                    return (
+                      <tr key={u.id}>
+                        <td className="bold">{u.name}</td>
+                        <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{u.email}</td>
+                        <td style={{ fontSize: 12, color: 'var(--ink-faint)' }}>
+                          {new Date(u.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                        </td>
+                        <td className="mono">{uOrders.length}</td>
+                        <td className="mono">{spent.toLocaleString('vi-VN')} VND</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
