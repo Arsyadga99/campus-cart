@@ -44,6 +44,15 @@ function KpiCard({ label, value, helper }) {
   );
 }
 
+function DetailRow({ label, value, tone = 'neutral' }) {
+  return (
+    <div className={`detail-row detail-row-${tone}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
 export default function Admin() {
   const location = useLocation();
   const activeTab = resolveTab(location.pathname);
@@ -125,6 +134,11 @@ export default function Admin() {
               <h3>{`${analytics.totalRevenueThisMonth.toLocaleString('vi-VN')} VND`}</h3>
               <p>Platform revenue booked in the current month</p>
             </article>
+            <KpiCard
+              label="Net Contribution This Month"
+              value={`${analytics.netContributionThisMonth.toLocaleString('vi-VN')} VND`}
+              helper="Monthly contribution margin after variable costs"
+            />
             <KpiCard
               label="Total Orders"
               value={analytics.totalOrders.toLocaleString()}
@@ -314,38 +328,52 @@ export default function Admin() {
                 </div>
                 {expandedOrderId === order.id ? (
                   <div className="admin-order-details">
-                    <div className="detail-row">
-                      <span>Subtotal</span>
-                      <strong>{order.subtotal.toLocaleString('vi-VN')} VND</strong>
-                    </div>
-                    <div className="detail-row">
-                      <span>Logistics fee charged</span>
-                      <strong>{order.deliveryFee.toLocaleString('vi-VN')} VND</strong>
-                    </div>
-                    <div className="detail-row">
-                      <span>Commission revenue</span>
-                      <strong>{order.commissionRevenue.toLocaleString('vi-VN')} VND</strong>
-                    </div>
-                    <div className="detail-row">
-                      <span>Promoted listing revenue</span>
-                      <strong>{(order.promotedListingRevenue ?? 0).toLocaleString('vi-VN')} VND</strong>
-                    </div>
-                    <div className="detail-row">
-                      <span>Subscription revenue</span>
-                      <strong>{(order.subscriptionRevenue ?? 0).toLocaleString('vi-VN')} VND</strong>
-                    </div>
-                    <div className="detail-row">
-                      <span>Contribution margin</span>
-                      <strong>{order.contributionMargin.toLocaleString('vi-VN')} VND</strong>
-                    </div>
-                    <div className="detail-row">
-                      <span>Delivery route</span>
-                      <strong>
-                        {order.deliveryAddress?.district
+                    <DetailRow
+                      label="Subtotal"
+                      value={`${order.subtotal.toLocaleString('vi-VN')} VND`}
+                    />
+                    <DetailRow
+                      label="Logistics fee charged"
+                      value={`${order.deliveryFee.toLocaleString('vi-VN')} VND`}
+                    />
+                    <DetailRow
+                      label="Commission revenue"
+                      value={`${order.commissionRevenue.toLocaleString('vi-VN')} VND`}
+                      tone="positive"
+                    />
+                    <DetailRow
+                      label="Delivery margin revenue"
+                      value={`${order.deliveryMarginRevenue.toLocaleString('vi-VN')} VND`}
+                      tone="positive"
+                    />
+                    <DetailRow
+                      label="Promoted listing revenue"
+                      value={`${(order.promotedListingRevenue ?? 0).toLocaleString('vi-VN')} VND`}
+                      tone="positive"
+                    />
+                    <DetailRow
+                      label="Subscription revenue"
+                      value={`${(order.subscriptionRevenue ?? 0).toLocaleString('vi-VN')} VND`}
+                      tone="positive"
+                    />
+                    <DetailRow
+                      label="Variable cost"
+                      value={`${order.variableCost.toLocaleString('vi-VN')} VND`}
+                      tone="negative"
+                    />
+                    <DetailRow
+                      label="Final revenue from this order"
+                      value={`${order.contributionMargin.toLocaleString('vi-VN')} VND`}
+                      tone="positive"
+                    />
+                    <DetailRow
+                      label="Delivery route"
+                      value={
+                        order.deliveryAddress?.district
                           ? `${order.deliveryAddress.district} / ${order.deliveryAddress.ward}`
-                          : 'Campus pickup'}
-                      </strong>
-                    </div>
+                          : 'Campus pickup'
+                      }
+                    />
                   </div>
                 ) : null}
               </article>

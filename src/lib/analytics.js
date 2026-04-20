@@ -111,6 +111,10 @@ export function summarizeAnalytics(users, allOrders, batches = [], marketingStat
     (sum, order) => sum + order.platformRevenue,
     0
   );
+  const netContributionThisMonth = monthlyOrders.reduce(
+    (sum, order) => sum + order.contributionMargin,
+    0
+  );
   const deliveryMarginRevenue = allOrders.reduce(
     (sum, order) => sum + order.deliveryMarginRevenue,
     0
@@ -212,6 +216,7 @@ export function summarizeAnalytics(users, allOrders, batches = [], marketingStat
   return {
     totalOrders,
     totalRevenueThisMonth,
+    netContributionThisMonth,
     grossMerchandiseValue,
     platformRevenue,
     commissionRevenue,

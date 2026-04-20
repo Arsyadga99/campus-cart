@@ -654,6 +654,18 @@ select {
   color: var(--text);
 }
 
+.detail-row-positive strong {
+  color: var(--accent);
+}
+
+.detail-row-negative strong {
+  color: var(--danger);
+}
+
+.detail-row-neutral strong {
+  color: var(--text);
+}
+
 .two-column-grid > .card h2,
 .order-entry h2,
 .auth-card h2,
@@ -1088,9 +1100,16 @@ select {
 
 @media (max-width: 760px) {
   .app-header-inner {
-    gap: 0.45rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.35rem 0.6rem;
     padding: 0.55rem 0;
-    align-items: start;
+    align-items: center;
+  }
+
+  .app-header-inner > :first-child {
+    grid-column: 1;
+    grid-row: 1;
   }
 
   .brand-title {
@@ -1103,6 +1122,8 @@ select {
 
   .nav-row {
     width: 100%;
+    grid-column: 1 / -1;
+    grid-row: 2;
     gap: 0.25rem;
   }
 
@@ -1112,9 +1133,12 @@ select {
   }
 
   .header-user {
-    width: 100%;
-    justify-content: space-between;
+    grid-column: 2;
+    grid-row: 1;
+    width: auto;
+    justify-content: flex-end;
     gap: 0.45rem;
+    align-self: center;
   }
 
   .header-user strong {
