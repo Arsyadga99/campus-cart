@@ -3,28 +3,96 @@
     "id": 1,
     "name": "Campus Chicken Rice",
     "price": 25000,
+    "originalPrice": 30000,
     "category": "Food",
-    "description": "Student favorite. Pre-order to get a cheaper price."
+    "emoji": "🍚",
+    "description": "Student favorite. Pre-order saves 17%.",
+    "badge": "preorder",
+    "tags": ["food", "popular"],
+    "orders": 152
   },
   {
     "id": 2,
     "name": "Stationery Value Pack",
     "price": 40000,
+    "originalPrice": 50000,
     "category": "Study Items",
-    "description": "Includes notebooks, pens, and highlighters."
+    "emoji": "📚",
+    "description": "Notebooks, pens, highlighters — all in one bundle.",
+    "badge": "popular",
+    "tags": ["study"],
+    "orders": 89
   },
   {
     "id": 3,
     "name": "Liquid Body Wash",
     "price": 30000,
+    "originalPrice": null,
     "category": "Daily Needs",
-    "description": "Dormitory daily essentials."
+    "emoji": "🧴",
+    "description": "Dormitory daily essential. Local vendor stock.",
+    "badge": null,
+    "tags": ["daily"],
+    "orders": 67
   },
   {
     "id": 4,
     "name": "Iced Milk Coffee",
     "price": 15000,
+    "originalPrice": null,
     "category": "Food",
-    "description": "Late-night study companion."
+    "emoji": "☕",
+    "description": "Late-night study companion. Made fresh daily.",
+    "badge": "popular",
+    "tags": ["food", "drink"],
+    "orders": 210
+  },
+  {
+    "id": 5,
+    "name": "Instant Noodle Bundle (x5)",
+    "price": 35000,
+    "originalPrice": 42000,
+    "category": "Food",
+    "emoji": "🍜",
+    "description": "Stock for a week. Pre-order batch pricing.",
+    "badge": "preorder",
+    "tags": ["food"],
+    "orders": 134
+  },
+  {
+    "id": 6,
+    "name": "Multivitamin Tablet",
+    "price": 45000,
+    "originalPrice": null,
+    "category": "Daily Needs",
+    "emoji": "💊",
+    "description": "Stay healthy during exam season.",
+    "badge": "new",
+    "tags": ["daily", "health"],
+    "orders": 28
+  },
+  {
+    "id": 7,
+    "name": "Graph Paper Notebook",
+    "price": 20000,
+    "originalPrice": null,
+    "category": "Study Items",
+    "emoji": "📓",
+    "description": "A5 size, 200 pages. Great for engineering.",
+    "badge": null,
+    "tags": ["study"],
+    "orders": 45
+  },
+  {
+    "id": 8,
+    "name": "Mineral Water 1.5L",
+    "price": 8000,
+    "originalPrice": null,
+    "category": "Daily Needs",
+    "emoji": "💧",
+    "description": "Stay hydrated between classes.",
+    "badge": null,
+    "tags": ["daily", "drink"],
+    "orders": 320
   }
 ]

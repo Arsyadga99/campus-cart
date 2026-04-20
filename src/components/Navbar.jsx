@@ -1,13 +1,41 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 
 export default function Navbar() {
+  const location = useLocation();
+  const [cartCount, setCartCount] = useState(0);
+
+  const updateCount = () => {
+    const cart = JSON.parse(localStorage.getItem('cart')) || [];
+    setCartCount(cart.reduce((sum, item) => sum + item.quantity, 0));
+  };
+
+  useEffect(() => {
+    updateCount();
+    window.addEventListener('cartUpdated', updateCount);
+    return () => window.removeEventListener('cartUpdated', updateCount);
+  }, []);
+
   return (
-    <nav style={{ padding: '15px 30px', background: '#2c3e50', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-      <h2 style={{ margin: 0, color: '#2ecc71' }}>CampusCart</h2>
-      <div style={{ display: 'flex', gap: '20px', fontWeight: 'bold' }}>
-        <Link to="/" style={{ color: 'white', textDecoration: 'none' }}>Catalog</Link>
-        <Link to="/cart" style={{ color: 'white', textDecoration: 'none' }}>Cart</Link>
-        <Link to="/admin" style={{ color: '#f1c40f', textDecoration: 'none' }}>Admin Panel</Link>
+    <nav className="navbar">
+      <div className="navbar-inner">
+        <Link to="/" className="navbar-brand">
+          <span className="emoji">🛒</span>
+          CampusCart
+        </Link>
+
+        <div className="navbar-links">
+          <Link to="/" className={`nav-link ${location.pathname === '/' ? 'active' : ''}`}>
+            🏠 Catalog
+          </Link>
+          <Link to="/cart" className={`nav-link ${location.pathname === '/cart' ? 'active' : ''}`}>
+            🛍️ Cart
+            {cartCount > 0 && <span className="nav-badge">{cartCount}</span>}
+          </Link>
+          <Link to="/admin" className={`nav-link ${location.pathname === '/admin' ? 'active' : ''}`}>
+            📊 Dashboard
+          </Link>
+        </div>
       </div>
     </nav>
   );
