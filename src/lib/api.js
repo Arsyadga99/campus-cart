@@ -30,6 +30,11 @@ export function getMarketingState() {
   return loadJson(KEY_MARKETING, getDefaultMarketingState());
 }
 
+export function saveMarketingState(nextState) {
+  saveJson(KEY_MARKETING, nextState);
+  return nextState;
+}
+
 export async function fetchCampuses() {
   return Promise.resolve(CAMPUSES);
 }

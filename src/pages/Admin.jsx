@@ -6,7 +6,7 @@ import {
   BUSINESS_RULES,
   CAMPUS_PHASES,
 } from '../constants/business';
-import { getMarketingState } from '../lib/api';
+import { getMarketingState, saveMarketingState } from '../lib/api';
 import { getCampusLabel, summarizeAnalytics } from '../lib/analytics';
 import { useAuth } from '../context/useAuth';
 
@@ -51,6 +51,7 @@ export default function Admin() {
   const [expandedOrderId, setExpandedOrderId] = useState(null);
   const [users, setUsers] = useState(() => getAllUsersWithOrders());
   const [batches, setBatches] = useState([]);
+  const [marketingState, setMarketingState] = useState(() => getMarketingState());
 
   useEffect(() => {
     let cancelled = false;
@@ -81,7 +82,6 @@ export default function Admin() {
     [users]
   );
 
-  const marketingState = getMarketingState();
   const analytics = useMemo(
     () => summarizeAnalytics(users, allOrders, batches, marketingState),
     [users, allOrders, batches, marketingState]
@@ -94,6 +94,14 @@ export default function Admin() {
   const handleDeleteStudent = (userId) => {
     deleteStudent(userId);
     setUsers((current) => current.filter((user) => user.id !== userId));
+  };
+
+  const handleMarketingSpendChange = (value) => {
+    const digitsOnly = value.replace(/[^\d]/g, '');
+    const monthlySpend = digitsOnly ? Number(digitsOnly) : 0;
+    const nextState = { ...marketingState, monthlySpend };
+    setMarketingState(nextState);
+    saveMarketingState(nextState);
   };
 
   return (
@@ -112,6 +120,11 @@ export default function Admin() {
       {activeTab === 'overview' ? (
         <>
           <section className="kpi-grid-v2">
+            <article className="card kpi-card-v2 kpi-card-hero">
+              <p className="eyebrow">Revenue This Month</p>
+              <h3>{`${analytics.totalRevenueThisMonth.toLocaleString('vi-VN')} VND`}</h3>
+              <p>Platform revenue booked in the current month</p>
+            </article>
             <KpiCard
               label="Total Orders"
               value={analytics.totalOrders.toLocaleString()}
@@ -191,7 +204,7 @@ export default function Admin() {
             </article>
           </section>
 
-          <section className="two-column-grid">
+          <section className="two-column-grid section-block">
             <article className="card">
               <p className="eyebrow">Campus Rollout</p>
               <h2>Multi-campus expansion status</h2>
@@ -485,14 +498,22 @@ export default function Admin() {
       ) : null}
 
       {activeTab === 'marketing' ? (
-        <section className="two-column-grid">
+        <section className="two-column-grid section-block">
           <article className="card">
             <p className="eyebrow">Marketing Metrics</p>
             <h2>Acquisition and retention measurement</h2>
             <div className="stack compact-stack">
               <div className="strategy-card">
                 <strong>Monthly marketing spend</strong>
-                <span>{analytics.marketingSpend.toLocaleString('vi-VN')} VND</span>
+                <div className="inline-field">
+                  <input
+                    value={marketingState.monthlySpend.toString()}
+                    onChange={(event) => handleMarketingSpendChange(event.target.value)}
+                    inputMode="numeric"
+                    placeholder="8000000"
+                  />
+                  <span>{analytics.marketingSpend.toLocaleString('vi-VN')} VND</span>
+                </div>
               </div>
               <div className="strategy-card">
                 <strong>Conversion rate</strong>

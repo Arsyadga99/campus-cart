@@ -28,6 +28,17 @@ function getEligiblePromo(code, orderCount, cartItems) {
   return { code, ...promo };
 }
 
+function buildVietQrUrl({ amount, user, items }) {
+  const accountName = 'CAMPUSCART DEMO';
+  const addInfo = `${user?.name ?? 'STUDENT'} / ${user?.id ?? 'USER'} / ${
+    items[0]?.name ?? 'ORDER'
+  }`;
+
+  return `https://img.vietqr.io/image/mbbank-1900111222333-qr_only.jpg?amount=${amount}&addInfo=${encodeURIComponent(
+    addInfo
+  )}&accountName=${encodeURIComponent(accountName)}`;
+}
+
 export default function Cart() {
   const { user, profile, getCart, saveCart, getOrders, addOrder } = useAuth();
   const [cartItems, setCartItems] = useState(() => getCart());
@@ -64,6 +75,15 @@ export default function Cart() {
       selectedPromo?.discount ?? 0
     );
   }, [cartItems, deliveryMethod, selectedPromo]);
+  const vietQrUrl = useMemo(
+    () =>
+      buildVietQrUrl({
+        amount: pricing.total,
+        user,
+        items: cartItems,
+      }),
+    [pricing.total, user, cartItems]
+  );
 
   const updateQuantity = (productId, delta) => {
     const updatedItems = cartItems.map((item) =>
@@ -317,7 +337,7 @@ export default function Cart() {
               <div className="option-stack">
                 {[
                   ['cod', 'Cash on delivery'],
-                  ['momo', 'Momo wallet'],
+                  ['vietqr', 'VietQR'],
                   ['bank', 'Bank transfer'],
                 ].map(([value, label]) => (
                   <button
@@ -331,6 +351,15 @@ export default function Cart() {
                 ))}
               </div>
             </div>
+
+            {paymentMethod === 'vietqr' ? (
+              <div className="option-group">
+                <label>VietQR payment</label>
+                <div className="vietqr-card">
+                  <img src={vietQrUrl} alt="VietQR payment code" className="vietqr-image" />
+                </div>
+              </div>
+            ) : null}
 
             <div className="option-group">
               <label>Campaign source</label>

@@ -94,12 +94,20 @@ export function getCurrentPhase(orderCount, activeCampusCount) {
 }
 
 export function summarizeAnalytics(users, allOrders, batches = [], marketingState) {
+  const currentMonthKey = new Date().toISOString().slice(0, 7);
+  const monthlyOrders = allOrders.filter(
+    (order) => order.createdAt.slice(0, 7) === currentMonthKey
+  );
   const totalOrders = allOrders.length;
   const grossMerchandiseValue = allOrders.reduce(
     (sum, order) => sum + order.subtotal,
     0
   );
   const platformRevenue = allOrders.reduce(
+    (sum, order) => sum + order.platformRevenue,
+    0
+  );
+  const totalRevenueThisMonth = monthlyOrders.reduce(
     (sum, order) => sum + order.platformRevenue,
     0
   );
@@ -203,6 +211,7 @@ export function summarizeAnalytics(users, allOrders, batches = [], marketingStat
 
   return {
     totalOrders,
+    totalRevenueThisMonth,
     grossMerchandiseValue,
     platformRevenue,
     commissionRevenue,
