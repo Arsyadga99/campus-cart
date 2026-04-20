@@ -1,71 +1,94 @@
 import { Link, useLocation } from 'react-router-dom';
-import { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useEffect, useState } from 'react';
+import { useAuth } from '../context/useAuth';
+
+function NavItem({ to, label, active }) {
+  return (
+    <Link to={to} className={`nav-item ${active ? 'active' : ''}`}>
+      {label}
+    </Link>
+  );
+}
 
 export default function Navbar() {
   const location = useLocation();
   const { user, role, logout, getCart } = useAuth();
   const [cartCount, setCartCount] = useState(0);
 
-  const updateCount = () => {
-    setCartCount(getCart().reduce((s, i) => s + i.quantity, 0));
-  };
-
   useEffect(() => {
-    updateCount();
-    window.addEventListener('cartUpdated', updateCount);
-    return () => window.removeEventListener('cartUpdated', updateCount);
-  }, [user]);
+    const sync = () => {
+      const count = getCart().reduce((sum, item) => sum + item.quantity, 0);
+      setCartCount(count);
+    };
 
-  const isActive = (path) => location.pathname === path;
+    sync();
+    window.addEventListener('cartUpdated', sync);
+    return () => window.removeEventListener('cartUpdated', sync);
+  }, [getCart]);
 
   return (
-    <nav className="navbar">
-      <div className="navbar-inner">
-        <div className="navbar-brand">
-          <div>
-            <div className="navbar-brand-name">CampusCart</div>
-            <div className="navbar-brand-tagline">
-              {role === 'admin' ? 'Admin Dashboard' : 'Student Marketplace'}
-            </div>
-          </div>
+    <header className="app-header">
+      <div className="app-header-inner">
+        <div>
+          <p className="brand-title">CampusCart</p>
+          <p className="brand-subtitle">
+            {role === 'admin' ? 'Business Dashboard' : 'Student Marketplace'}
+          </p>
         </div>
 
-        <div className="navbar-links">
-          {role === 'student' && (
+        <nav className="nav-row">
+          {role === 'student' ? (
             <>
-              <Link to="/" className={`nav-link ${isActive('/') ? 'active' : ''}`}>Catalog</Link>
-              <Link to="/cart" className={`nav-link ${isActive('/cart') ? 'active' : ''}`}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  Cart
-                  {cartCount > 0 && <span className="nav-badge">{cartCount}</span>}
-                </span>
-              </Link>
-              <Link to="/orders" className={`nav-link ${isActive('/orders') ? 'active' : ''}`}>My Orders</Link>
+              <NavItem to="/" label="Marketplace" active={location.pathname === '/'} />
+              <NavItem
+                to="/cart"
+                label={`Cart${cartCount ? ` (${cartCount})` : ''}`}
+                active={location.pathname === '/cart'}
+              />
+              <NavItem
+                to="/orders"
+                label="Orders"
+                active={location.pathname === '/orders'}
+              />
             </>
-          )}
-          {role === 'admin' && (
+          ) : null}
+
+          {role === 'admin' ? (
             <>
-              <Link to="/admin" className={`nav-link ${isActive('/admin') ? 'active' : ''}`}>Overview</Link>
-              <Link to="/admin/orders" className={`nav-link ${isActive('/admin/orders') ? 'active' : ''}`}>Orders</Link>
-              <Link to="/admin/economics" className={`nav-link ${isActive('/admin/economics') ? 'active' : ''}`}>Unit Economics</Link>
-              <Link to="/admin/users" className={`nav-link ${isActive('/admin/users') ? 'active' : ''}`}>Students</Link>
+              <NavItem
+                to="/admin"
+                label="Overview"
+                active={location.pathname === '/admin'}
+              />
+              <NavItem
+                to="/admin/orders"
+                label="Orders"
+                active={location.pathname === '/admin/orders'}
+              />
+              <NavItem
+                to="/admin/economics"
+                label="Economics"
+                active={location.pathname === '/admin/economics'}
+              />
+              <NavItem
+                to="/admin/users"
+                label="Students"
+                active={location.pathname === '/admin/users'}
+              />
             </>
-          )}
+          ) : null}
+        </nav>
 
-          <div className="navbar-divider" style={{ margin: '0 8px' }} />
-
-          <div className="navbar-user">
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)' }}>{user?.name}</div>
-              <div style={{ fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--ink-faint)' }}>
-                {role}
-              </div>
-            </div>
-            <button className="btn-logout" onClick={logout}>Sign Out</button>
+        <div className="header-user">
+          <div>
+            <strong>{user?.name}</strong>
+            <span>{role}</span>
           </div>
+          <button type="button" className="ghost-button" onClick={logout}>
+            Sign out
+          </button>
         </div>
       </div>
-    </nav>
+    </header>
   );
 }

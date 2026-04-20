@@ -1,31 +1,33 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 
 export default function FloatingCart() {
-  const { getCart, user } = useAuth();
+  const { getCart } = useAuth();
   const [summary, setSummary] = useState({ count: 0, total: 0 });
 
-  const update = () => {
-    const cart  = getCart();
-    const count = cart.reduce((s, i) => s + i.quantity, 0);
-    const total = cart.reduce((s, i) => s + i.price * i.quantity, 0);
-    setSummary({ count, total });
-  };
-
   useEffect(() => {
-    update();
-    window.addEventListener('cartUpdated', update);
-    return () => window.removeEventListener('cartUpdated', update);
-  }, [user]);
+    const sync = () => {
+      const cart = getCart();
+      setSummary({
+        count: cart.reduce((sum, item) => sum + item.quantity, 0),
+        total: cart.reduce((sum, item) => sum + item.quantity * item.price, 0),
+      });
+    };
 
-  if (summary.count === 0) return null;
+    sync();
+    window.addEventListener('cartUpdated', sync);
+    return () => window.removeEventListener('cartUpdated', sync);
+  }, [getCart]);
+
+  if (!summary.count) {
+    return null;
+  }
 
   return (
-    <Link to="/cart" className="floating-cart">
-      <span className="floating-cart-count">{summary.count} items</span>
-      <span className="floating-cart-label">View Cart</span>
-      <span className="floating-cart-total">{summary.total.toLocaleString('vi-VN')} VND</span>
+    <Link to="/cart" className="floating-cart-bar">
+      <span>{summary.count} items</span>
+      <strong>{summary.total.toLocaleString('vi-VN')} VND</strong>
     </Link>
   );
 }

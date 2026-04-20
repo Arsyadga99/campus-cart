@@ -1,64 +1,100 @@
-import { createContext, useContext, useState } from 'react';
+import { useState } from 'react';
+import { AuthContext } from './auth-context';
+import { calculateCartPricing } from '../lib/analytics';
+import { loadJson, saveJson, simpleHash } from '../lib/storage';
 
-const ADMIN_PASSWORD = 'X9v!Kq2@Lm7#Zp';
-const KEY_USERS   = 'cc_users';
+const ADMIN_EMAIL = 'admin@campuscart.local';
+const ADMIN_PASSWORD_HASH = simpleHash('CampusCartAdmin2026');
+const KEY_USERS = 'cc_users';
 const KEY_SESSION = 'cc_session';
 
-const AuthContext = createContext(null);
+function buildCartKey(userId) {
+  return `cc_cart_${userId}`;
+}
 
-/* ─── helpers ─── */
-const loadJSON = (key, fallback = null) => {
-  try { return JSON.parse(localStorage.getItem(key)) ?? fallback; }
-  catch { return fallback; }
-};
-const saveJSON = (key, val) => localStorage.setItem(key, JSON.stringify(val));
-const cartKey   = (uid) => `cc_cart_${uid}`;
-const ordersKey = (uid) => `cc_orders_${uid}`;
+function buildOrdersKey(userId) {
+  return `cc_orders_${userId}`;
+}
+
+function createStudentProfile({ name, email, password }) {
+  return {
+    id: `student_${Date.now()}`,
+    name: name.trim(),
+    email: email.trim().toLowerCase(),
+    passwordHash: simpleHash(password),
+    createdAt: new Date().toISOString(),
+  };
+}
 
 export function AuthProvider({ children }) {
-  const [session, setSession] = useState(() => loadJSON(KEY_SESSION, null));
+  const [session, setSession] = useState(() => loadJson(KEY_SESSION, null));
 
-  /* ── user registry ── */
-  const getUsers   = () => loadJSON(KEY_USERS, []);
-  const saveUsers  = (arr) => saveJSON(KEY_USERS, arr);
+  const getUsers = () => loadJson(KEY_USERS, []);
+  const saveUsers = (users) => saveJson(KEY_USERS, users);
 
-  const startSession = (sess) => {
-    saveJSON(KEY_SESSION, sess);
-    setSession(sess);
+  const startSession = (nextSession) => {
+    saveJson(KEY_SESSION, nextSession);
+    setSession(nextSession);
   };
 
-  /* ── register ── */
   const register = (name, email, password) => {
-    if (!name.trim() || !email.trim() || !password)
-      return { success: false, error: 'All fields are required.' };
+    if (!name.trim() || !email.trim() || !password.trim()) {
+      return { success: false, error: 'All registration fields are required.' };
+    }
+
     const users = getUsers();
-    if (users.find(u => u.email.toLowerCase() === email.toLowerCase()))
-      return { success: false, error: 'Email is already registered.' };
-    const user = {
-      id: 'u_' + Date.now(),
-      name: name.trim(),
-      email: email.toLowerCase().trim(),
-      password,           // plain-text — demo only
-      createdAt: new Date().toISOString(),
-    };
-    saveUsers([...users, user]);
-    startSession({ id: user.id, name: user.name, email: user.email, role: 'student' });
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (users.some((user) => user.email === normalizedEmail)) {
+      return { success: false, error: 'This email is already registered.' };
+    }
+
+    const student = createStudentProfile({ name, email, password });
+    saveUsers([...users, student]);
+    startSession({
+      id: student.id,
+      name: student.name,
+      email: student.email,
+      role: 'student',
+    });
+
     return { success: true };
   };
 
-  /* ── login ── */
   const login = (email, password) => {
-    // Admin shortcut: any email + admin password
-    if (password === ADMIN_PASSWORD) {
-      startSession({ id: 'admin', name: 'Administrator', email: email || 'admin', role: 'admin' });
+    const normalizedEmail = email.trim().toLowerCase();
+    const passwordHash = simpleHash(password);
+
+    if (
+      normalizedEmail === ADMIN_EMAIL &&
+      passwordHash === ADMIN_PASSWORD_HASH
+    ) {
+      startSession({
+        id: 'admin',
+        name: 'CampusCart Admin',
+        email: ADMIN_EMAIL,
+        role: 'admin',
+      });
+
       return { success: true };
     }
-    const users = getUsers();
-    const user  = users.find(
-      u => u.email.toLowerCase() === email.toLowerCase().trim() && u.password === password
+
+    const user = getUsers().find(
+      (entry) =>
+        entry.email === normalizedEmail && entry.passwordHash === passwordHash
     );
-    if (!user) return { success: false, error: 'Incorrect email or password.' };
-    startSession({ id: user.id, name: user.name, email: user.email, role: 'student' });
+
+    if (!user) {
+      return { success: false, error: 'Incorrect email or password.' };
+    }
+
+    startSession({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: 'student',
+    });
+
     return { success: true };
   };
 
@@ -67,49 +103,97 @@ export function AuthProvider({ children }) {
     setSession(null);
   };
 
-  /* ── per-user cart ── */
-  const getCart = () => {
-    if (!session) return [];
-    return loadJSON(cartKey(session.id), []);
+  const getCart = (userId = session?.id) => {
+    if (!userId) {
+      return [];
+    }
+
+    return loadJson(buildCartKey(userId), []);
   };
 
-  const saveCart = (cart) => {
-    if (!session) return;
-    saveJSON(cartKey(session.id), cart);
+  const saveCart = (cartItems, userId = session?.id) => {
+    if (!userId) {
+      return;
+    }
+
+    saveJson(buildCartKey(userId), cartItems);
     window.dispatchEvent(new Event('cartUpdated'));
   };
 
-  /* ── per-user orders ── */
-  const getOrders = (uid) => loadJSON(ordersKey(uid ?? session?.id), []);
+  const getOrders = (userId = session?.id) => {
+    if (!userId) {
+      return [];
+    }
 
-  const addOrder = (order) => {
-    if (!session) return;
-    const prev = getOrders();
-    saveJSON(ordersKey(session.id), [...prev, order]);
+    return loadJson(buildOrdersKey(userId), []);
   };
 
-  /* ── admin helpers ── */
-  const getAllUsers = () => getUsers();
+  const addOrder = ({
+    items,
+    deliveryMethod,
+    paymentMethod,
+    promoDiscount,
+    promoCode,
+  }) => {
+    if (!session?.id) {
+      return null;
+    }
 
-  const getUserOrders = (uid) => getOrders(uid);
+    const pricing = calculateCartPricing(items, deliveryMethod, promoDiscount);
+    const order = {
+      id: `ORD-${Math.floor(100000 + Math.random() * 900000)}`,
+      items,
+      ...pricing,
+      paymentMethod,
+      deliveryMethod,
+      promoDiscount,
+      promoCode,
+      createdAt: new Date().toISOString(),
+    };
+
+    saveJson(buildOrdersKey(session.id), [...getOrders(), order]);
+    saveCart([]);
+    return order;
+  };
+
+  const getAllUsersWithOrders = () =>
+    getUsers().map((user) => ({
+      ...user,
+      orders: getOrders(user.id),
+    }));
+
+  const deleteStudent = (userId) => {
+    const users = getUsers();
+    const nextUsers = users.filter((user) => user.id !== userId);
+
+    saveUsers(nextUsers);
+    localStorage.removeItem(buildCartKey(userId));
+    localStorage.removeItem(buildOrdersKey(userId));
+
+    if (session?.id === userId) {
+      logout();
+    }
+  };
+
+  const contextValue = {
+    user: session,
+    role: session?.role ?? null,
+    register,
+    login,
+    logout,
+    getCart,
+    saveCart,
+    getOrders,
+    addOrder,
+    getAllUsersWithOrders,
+    deleteStudent,
+    adminCredentials: {
+      email: ADMIN_EMAIL,
+      passwordHint: 'CampusCartAdmin2026',
+    },
+  };
 
   return (
-    <AuthContext.Provider value={{
-      user: session,
-      role: session?.role ?? null,
-      login,
-      logout,
-      register,
-      getCart,
-      saveCart,
-      getOrders,
-      addOrder,
-      getAllUsers,
-      getUserOrders,
-    }}>
-      {children}
-    </AuthContext.Provider>
+    <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>
   );
 }
-
-export const useAuth = () => useContext(AuthContext);
