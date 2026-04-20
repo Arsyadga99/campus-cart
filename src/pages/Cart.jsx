@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { calculateCartPricing } from '../lib/analytics';
+import { calculateCartPricing, getCampusLabel } from '../lib/analytics';
+import { DELIVERY_ZONES, DISTRICTS } from '../data/deliveryZones';
 import { useAuth } from '../context/useAuth';
 
 const PROMO_RULES = {
   CAMPUS2026: { discount: 5000, description: 'Referral discount for new campus users' },
   NEWUSER: { discount: 10000, description: 'First order incentive to improve acquisition' },
   BATCH10: { discount: 8000, description: 'Batch adoption discount for pre-order behavior' },
+  GROUPBUY: { discount: 7000, description: 'Shared batch discount for grouped demand' },
 };
 
-function getEligiblePromo(code, orderCount) {
+function getEligiblePromo(code, orderCount, cartItems) {
   const promo = PROMO_RULES[code];
   if (!promo) {
     return null;
@@ -19,11 +21,15 @@ function getEligiblePromo(code, orderCount) {
     return null;
   }
 
+  if (code === 'GROUPBUY' && !cartItems.some((item) => item.groupEligible && item.quantity >= 2)) {
+    return null;
+  }
+
   return { code, ...promo };
 }
 
 export default function Cart() {
-  const { getCart, saveCart, getOrders, addOrder } = useAuth();
+  const { user, profile, getCart, saveCart, getOrders, addOrder } = useAuth();
   const [cartItems, setCartItems] = useState(() => getCart());
   const [deliveryMethod, setDeliveryMethod] = useState('pickup');
   const [paymentMethod, setPaymentMethod] = useState('cod');
@@ -31,6 +37,13 @@ export default function Cart() {
   const [selectedPromo, setSelectedPromo] = useState(null);
   const [lastOrder, setLastOrder] = useState(null);
   const [promoMessage, setPromoMessage] = useState('');
+  const [campaignSource, setCampaignSource] = useState(profile?.acquisitionChannel ?? 'Referral');
+  const [deliveryAddress, setDeliveryAddress] = useState({
+    district: DISTRICTS[0],
+    ward: DELIVERY_ZONES[DISTRICTS[0]][0],
+    street: '',
+  });
+  const [addressError, setAddressError] = useState('');
 
   useEffect(() => {
     const syncCart = () => {
@@ -41,6 +54,7 @@ export default function Cart() {
     return () => window.removeEventListener('cartUpdated', syncCart);
   }, [getCart]);
 
+  const wards = DELIVERY_ZONES[deliveryAddress.district] ?? [];
   const orderCount = getOrders().length;
 
   const pricing = useMemo(() => {
@@ -70,7 +84,7 @@ export default function Cart() {
 
   const applyPromo = () => {
     const normalizedCode = promoCode.trim().toUpperCase();
-    const promo = getEligiblePromo(normalizedCode, orderCount);
+    const promo = getEligiblePromo(normalizedCode, orderCount, cartItems);
 
     if (!promo) {
       setSelectedPromo(null);
@@ -82,17 +96,44 @@ export default function Cart() {
     setPromoMessage(promo.description);
   };
 
+  const updateDistrict = (district) => {
+    const nextWards = DELIVERY_ZONES[district];
+    setDeliveryAddress({
+      district,
+      ward: nextWards[0],
+      street: '',
+    });
+  };
+
   const placeOrder = () => {
     if (!cartItems.length) {
       return;
     }
 
+    if (deliveryMethod === 'delivery' && !deliveryAddress.street.trim()) {
+      setAddressError('Street name is required for dormitory delivery.');
+      return;
+    }
+
+    setAddressError('');
     const order = addOrder({
       items: cartItems,
       deliveryMethod,
       paymentMethod,
       promoDiscount: selectedPromo?.discount ?? 0,
       promoCode: selectedPromo?.code ?? null,
+      deliveryAddress:
+        deliveryMethod === 'delivery'
+          ? {
+              ...deliveryAddress,
+              street: deliveryAddress.street.trim(),
+            }
+          : {
+              district: null,
+              ward: null,
+              street: `Pickup hub at ${getCampusLabel(user?.campusId)}`,
+            },
+      campaignSource,
     });
 
     setLastOrder(order);
@@ -106,8 +147,8 @@ export default function Cart() {
           <p className="eyebrow">Order Confirmed</p>
           <h1>Pre-order submitted successfully</h1>
           <p>
-            The order is now queued for the next batch window and recorded in the
-            student order history.
+            The order is now assigned to a live batch window and recorded in the student
+            order history.
           </p>
 
           <div className="summary-grid">
@@ -116,12 +157,16 @@ export default function Cart() {
               <strong>{lastOrder.id}</strong>
             </div>
             <div className="summary-box">
+              <span>Batch ID</span>
+              <strong>{lastOrder.batchId}</strong>
+            </div>
+            <div className="summary-box">
               <span>Total paid</span>
               <strong>{lastOrder.total.toLocaleString('vi-VN')} VND</strong>
             </div>
             <div className="summary-box">
-              <span>Delivery method</span>
-              <strong>{lastOrder.deliveryMethod}</strong>
+              <span>Batch window</span>
+              <strong>{lastOrder.batchWindow}</strong>
             </div>
           </div>
 
@@ -145,8 +190,8 @@ export default function Cart() {
           <p className="eyebrow">Pre-Order Checkout</p>
           <h1>Review campus order details</h1>
           <p className="support-copy">
-            Review products, delivery, payment, and the final amount before
-            submitting your campus pre-order.
+            Each order uses the report assumption of 10,000 VND logistics fee, then gets
+            routed into campus and district batch windows.
           </p>
         </div>
       </section>
@@ -201,7 +246,7 @@ export default function Cart() {
             <h2>Order summary</h2>
 
             <div className="option-group">
-              <label>Delivery method</label>
+              <label>Fulfillment mode</label>
               <div className="option-stack">
                 <button
                   type="button"
@@ -219,6 +264,53 @@ export default function Cart() {
                 </button>
               </div>
             </div>
+
+            {deliveryMethod === 'delivery' ? (
+              <div className="option-group">
+                <label>Delivery address</label>
+                <div className="stack compact-stack">
+                  <select
+                    value={deliveryAddress.district}
+                    onChange={(event) => updateDistrict(event.target.value)}
+                  >
+                    {DISTRICTS.map((district) => (
+                      <option key={district} value={district}>
+                        {district}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={deliveryAddress.ward}
+                    onChange={(event) =>
+                      setDeliveryAddress((current) => ({
+                        ...current,
+                        ward: event.target.value,
+                      }))
+                    }
+                  >
+                    {wards.map((ward) => (
+                      <option key={ward} value={ward}>
+                        {ward}
+                      </option>
+                    ))}
+                  </select>
+
+                  <input
+                    className="search-input"
+                    value={deliveryAddress.street}
+                    onChange={(event) =>
+                      setDeliveryAddress((current) => ({
+                        ...current,
+                        street: event.target.value,
+                      }))
+                    }
+                    placeholder="Street name / house number"
+                  />
+                </div>
+                {addressError ? <p className="error-text">{addressError}</p> : null}
+              </div>
+            ) : null}
 
             <div className="option-group">
               <label>Payment method</label>
@@ -238,6 +330,22 @@ export default function Cart() {
                   </button>
                 ))}
               </div>
+            </div>
+
+            <div className="option-group">
+              <label>Campaign source</label>
+              <select
+                value={campaignSource}
+                onChange={(event) => setCampaignSource(event.target.value)}
+              >
+                {['Referral', 'TikTok', 'Facebook', 'Campus Ambassador', 'Organic Search'].map(
+                  (source) => (
+                    <option key={source} value={source}>
+                      {source}
+                    </option>
+                  )
+                )}
+              </select>
             </div>
 
             <div className="option-group">
@@ -262,12 +370,16 @@ export default function Cart() {
                 <dd>{pricing.subtotal.toLocaleString('vi-VN')} VND</dd>
               </div>
               <div>
-                <dt>Delivery fee</dt>
+                <dt>Logistics fee</dt>
                 <dd>{pricing.deliveryFee.toLocaleString('vi-VN')} VND</dd>
               </div>
               <div>
                 <dt>Promo discount</dt>
                 <dd>{(selectedPromo?.discount ?? 0).toLocaleString('vi-VN')} VND</dd>
+              </div>
+              <div>
+                <dt>Contribution margin</dt>
+                <dd>{pricing.contributionMargin.toLocaleString('vi-VN')} VND</dd>
               </div>
               <div className="summary-total">
                 <dt>Total</dt>

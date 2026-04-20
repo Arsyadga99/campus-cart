@@ -2,13 +2,24 @@ import { useState } from 'react';
 import { ADVANCED_FEATURES } from '../constants/business';
 import { useAuth } from '../context/useAuth';
 
+const ACQUISITION_CHANNELS = [
+  'Referral',
+  'TikTok',
+  'Facebook',
+  'Campus Ambassador',
+  'Organic Search',
+];
+
 export default function Login() {
-  const { login, register } = useAuth();
+  const { login, register, availableCampuses } = useAuth();
   const [mode, setMode] = useState('login');
   const [formState, setFormState] = useState({
     name: '',
     email: '',
     password: '',
+    campusId: availableCampuses[0]?.id ?? '',
+    acquisitionChannel: ACQUISITION_CHANNELS[0],
+    referralCodeUsed: '',
   });
   const [error, setError] = useState('');
 
@@ -23,7 +34,7 @@ export default function Login() {
     const result =
       mode === 'login'
         ? login(formState.email, formState.password)
-        : register(formState.name, formState.email, formState.password);
+        : register(formState);
 
     if (!result.success) {
       setError(result.error);
@@ -40,9 +51,9 @@ export default function Login() {
             Student commerce optimized for speed, personalization, and feasibility.
           </p>
           <p className="support-copy light-copy auth-description">
-            This version emphasizes clean code, mobile-first usability, transparent
-            unit economics, and two advanced e-commerce features required by the
-            assignment.
+            This version now includes multi-campus onboarding, referral-aware growth
+            tracking, smart batch delivery, and admin analytics tied directly to
+            operational data.
           </p>
         </div>
 
@@ -80,14 +91,57 @@ export default function Login() {
 
           <form className="stack" onSubmit={handleSubmit}>
             {mode === 'register' ? (
-              <label className="field">
-                <span>Full name</span>
-                <input
-                  value={formState.name}
-                  onChange={(event) => updateField('name', event.target.value)}
-                  placeholder="Nguyen Van An"
-                />
-              </label>
+              <>
+                <label className="field">
+                  <span>Full name</span>
+                  <input
+                    value={formState.name}
+                    onChange={(event) => updateField('name', event.target.value)}
+                    placeholder="Nguyen Van An"
+                  />
+                </label>
+
+                <label className="field">
+                  <span>Campus</span>
+                  <select
+                    value={formState.campusId}
+                    onChange={(event) => updateField('campusId', event.target.value)}
+                  >
+                    {availableCampuses.map((campus) => (
+                      <option key={campus.id} value={campus.id}>
+                        {campus.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="field">
+                  <span>Acquisition channel</span>
+                  <select
+                    value={formState.acquisitionChannel}
+                    onChange={(event) =>
+                      updateField('acquisitionChannel', event.target.value)
+                    }
+                  >
+                    {ACQUISITION_CHANNELS.map((channel) => (
+                      <option key={channel} value={channel}>
+                        {channel}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="field">
+                  <span>Referral code</span>
+                  <input
+                    value={formState.referralCodeUsed}
+                    onChange={(event) =>
+                      updateField('referralCodeUsed', event.target.value)
+                    }
+                    placeholder="Optional"
+                  />
+                </label>
+              </>
             ) : null}
 
             <label className="field">

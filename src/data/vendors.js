@@ -1,0 +1,66 @@
+export const VENDORS = [
+  {
+    id: 'vendor-dorm-food-hub',
+    name: 'Dormitory Food Hub',
+    campusIds: ['hcmut-main', 'hcmut-dormitory', 'uit-linh-trung'],
+    tier: 'premium',
+    subscriptionPlan: 'Growth',
+    commissionRate: 0.12,
+    promoted: true,
+    serviceLevel: 'same-day',
+  },
+  {
+    id: 'vendor-lecture-supplies',
+    name: 'Lecture Hall Supplies',
+    campusIds: ['hcmut-main', 'hcmus-nguyen-van-cu', 'ueh-nguyen-trai'],
+    tier: 'core',
+    subscriptionPlan: 'Starter',
+    commissionRate: 0.1,
+    promoted: false,
+    serviceLevel: 'next-batch',
+  },
+  {
+    id: 'vendor-dorm-essentials',
+    name: 'Dormitory Essentials',
+    campusIds: ['hcmut-dormitory', 'ussh-linh-trung', 'uit-linh-trung'],
+    tier: 'premium',
+    subscriptionPlan: 'Scale',
+    commissionRate: 0.14,
+    promoted: true,
+    serviceLevel: 'same-day',
+  },
+  {
+    id: 'vendor-south-gate-coffee',
+    name: 'South Gate Coffee',
+    campusIds: ['hcmut-main', 'hcmut-dormitory'],
+    tier: 'core',
+    subscriptionPlan: 'Starter',
+    commissionRate: 0.1,
+    promoted: false,
+    serviceLevel: 'within-2-hours',
+  },
+  {
+    id: 'vendor-campus-pharmacy',
+    name: 'Campus Pharmacy Partner',
+    campusIds: ['hcmut-main', 'ftu2-binh-thanh', 'huflit-phu-nhuan'],
+    tier: 'premium',
+    subscriptionPlan: 'Growth',
+    commissionRate: 0.13,
+    promoted: true,
+    serviceLevel: 'next-day',
+  },
+  {
+    id: 'vendor-riverside-meals',
+    name: 'Riverside Meals',
+    campusIds: ['ton-duc-thang-d7', 'hutech-binh-thanh'],
+    tier: 'core',
+    subscriptionPlan: 'Growth',
+    commissionRate: 0.11,
+    promoted: false,
+    serviceLevel: 'same-day',
+  },
+];
+
+export const VENDOR_BY_ID = Object.fromEntries(
+  VENDORS.map((vendor) => [vendor.id, vendor])
+);

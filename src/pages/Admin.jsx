@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   ADVANCED_FEATURES,
@@ -6,7 +6,8 @@ import {
   BUSINESS_RULES,
   CAMPUS_PHASES,
 } from '../constants/business';
-import { summarizeAnalytics } from '../lib/analytics';
+import { getMarketingState } from '../lib/api';
+import { getCampusLabel, summarizeAnalytics } from '../lib/analytics';
 import { useAuth } from '../context/useAuth';
 
 function resolveTab(pathname) {
@@ -20,6 +21,14 @@ function resolveTab(pathname) {
 
   if (pathname === '/admin/users') {
     return 'users';
+  }
+
+  if (pathname === '/admin/vendors') {
+    return 'vendors';
+  }
+
+  if (pathname === '/admin/marketing') {
+    return 'marketing';
   }
 
   return 'overview';
@@ -38,19 +47,45 @@ function KpiCard({ label, value, helper }) {
 export default function Admin() {
   const location = useLocation();
   const activeTab = resolveTab(location.pathname);
-  const { getAllUsersWithOrders, deleteStudent } = useAuth();
+  const { getAllUsersWithOrders, getAllBatches, deleteStudent, platformMode } = useAuth();
   const [expandedOrderId, setExpandedOrderId] = useState(null);
   const [users, setUsers] = useState(() => getAllUsersWithOrders());
+  const [batches, setBatches] = useState([]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    getAllBatches().then((nextBatches) => {
+      if (!cancelled) {
+        setBatches(nextBatches.sort((left, right) => right.cutoffAt.localeCompare(left.cutoffAt)));
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [getAllBatches]);
 
   const allOrders = useMemo(
     () =>
       users
-        .flatMap((user) => user.orders.map((order) => ({ ...order, studentName: user.name })))
+        .flatMap((user) =>
+          user.orders.map((order) => ({
+            ...order,
+            studentName: user.name,
+            studentCampusId: user.campusId,
+            acquisitionChannel: user.acquisitionChannel,
+          }))
+        )
         .sort((left, right) => right.createdAt.localeCompare(left.createdAt)),
     [users]
   );
 
-  const analytics = useMemo(() => summarizeAnalytics(users, allOrders), [users, allOrders]);
+  const marketingState = getMarketingState();
+  const analytics = useMemo(
+    () => summarizeAnalytics(users, allOrders, batches, marketingState),
+    [users, allOrders, batches, marketingState]
+  );
   const upcomingPhases = useMemo(
     () => CAMPUS_PHASES.filter((phase) => phase.id !== analytics.activePhase.id),
     [analytics.activePhase.id]
@@ -68,8 +103,8 @@ export default function Admin() {
           <p className="eyebrow">Admin Console</p>
           <h1>Business analytics and feasibility tracking</h1>
           <p className="support-copy">
-            This dashboard operationalizes the report by exposing market validation,
-            contribution margin, and break-even progress inside the product.
+            Runtime: {platformMode}. Campus growth, vendor monetization, marketing
+            efficiency, and batch delivery are now traced from product data.
           </p>
         </div>
       </section>
@@ -83,29 +118,29 @@ export default function Admin() {
               helper={`Break-even target: ${BREAK_EVEN_ORDERS.toLocaleString()} orders/month`}
             />
             <KpiCard
-              label="GMV"
-              value={`${analytics.grossMerchandiseValue.toLocaleString('vi-VN')} VND`}
-              helper="Tracks student purchasing volume across vendors"
+              label="Active Campuses"
+              value={analytics.activeCampusCount}
+              helper="Campuses with live order activity"
             />
             <KpiCard
-              label="Platform Revenue"
-              value={`${analytics.platformRevenue.toLocaleString('vi-VN')} VND`}
-              helper="Commission plus delivery margin"
+              label="CAC"
+              value={`${analytics.customerAcquisitionCost.toLocaleString('vi-VN')} VND`}
+              helper="Marketing spend divided by acquired students"
             />
             <KpiCard
-              label="Contribution Margin"
-              value={`${analytics.contributionMargin.toLocaleString('vi-VN')} VND`}
-              helper="Revenue after variable order costs"
+              label="Conversion Rate"
+              value={`${analytics.conversionRate}%`}
+              helper="Students with at least one completed order"
             />
             <KpiCard
-              label="Retention Proxy"
-              value={`${analytics.retentionProxy}%`}
-              helper="Repeat buyers divided by total student accounts"
+              label="Referral Share"
+              value={`${analytics.referralShare}%`}
+              helper="Students acquired through referral codes"
             />
             <KpiCard
-              label="Orders per User"
-              value={analytics.averageOrdersPerUser}
-              helper="Engagement intensity for the student base"
+              label="Group-Buy Share"
+              value={`${analytics.groupBuyShare}%`}
+              helper="Orders contributing to grouped demand"
             />
           </section>
 
@@ -138,7 +173,7 @@ export default function Admin() {
                   {analytics.activePhase.label} / {analytics.activePhase.title}
                 </h2>
                 <span className="phase-meta">
-                  {analytics.activePhase.campusRange} • {analytics.activePhase.orderRange}
+                  {analytics.activePhase.campusRange} / {analytics.activePhase.orderRange}
                 </span>
               </div>
               <div className="roadmap-scroll">
@@ -148,10 +183,46 @@ export default function Admin() {
                       {phase.label} / {phase.title}
                     </strong>
                     <span className="phase-meta">
-                      {phase.campusRange} • {phase.orderRange}
+                      {phase.campusRange} / {phase.orderRange}
                     </span>
                   </div>
                 ))}
+              </div>
+            </article>
+          </section>
+
+          <section className="two-column-grid">
+            <article className="card">
+              <p className="eyebrow">Campus Rollout</p>
+              <h2>Multi-campus expansion status</h2>
+              <div className="stack compact-stack">
+                {analytics.campusPerformance.slice(0, 6).map((campus) => (
+                  <div key={campus.id} className="strategy-card">
+                    <strong>{campus.name}</strong>
+                    <span>
+                      {campus.orderCount} orders / {campus.studentCount} students / {campus.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </article>
+
+            <article className="card">
+              <p className="eyebrow">Batch Operations</p>
+              <h2>Smart delivery batching</h2>
+              <div className="stack compact-stack">
+                <div className="strategy-card">
+                  <strong>Average batch size</strong>
+                  <span>{analytics.averageBatchSize} orders per batch</span>
+                </div>
+                <div className="strategy-card">
+                  <strong>Grouped unit coverage</strong>
+                  <span>{analytics.batchCoverage}% of ordered units join dense routes</span>
+                </div>
+                <div className="strategy-card">
+                  <strong>District coverage</strong>
+                  <span>{analytics.districtCoverage} active delivery districts</span>
+                </div>
               </div>
             </article>
           </section>
@@ -194,8 +265,14 @@ export default function Admin() {
                   </div>
                   <div className="order-badge-block">
                     <span>{order.total.toLocaleString('vi-VN')} VND</span>
-                    <small>{order.paymentMethod}</small>
+                    <small>{order.batchId}</small>
                   </div>
+                </div>
+                <div className="compact-meta">
+                  <span>{getCampusLabel(order.campusId)}</span>
+                  <span>{order.deliveryMethod}</span>
+                  <span>{order.campaignSource}</span>
+                  <span>{order.batchWindow}</span>
                 </div>
                 <div className="order-item-list">
                   {order.items.map((item) => (
@@ -229,28 +306,32 @@ export default function Admin() {
                       <strong>{order.subtotal.toLocaleString('vi-VN')} VND</strong>
                     </div>
                     <div className="detail-row">
-                      <span>Delivery fee charged</span>
+                      <span>Logistics fee charged</span>
                       <strong>{order.deliveryFee.toLocaleString('vi-VN')} VND</strong>
-                    </div>
-                    <div className="detail-row">
-                      <span>Promo discount</span>
-                      <strong>{order.promoDiscount.toLocaleString('vi-VN')} VND</strong>
                     </div>
                     <div className="detail-row">
                       <span>Commission revenue</span>
                       <strong>{order.commissionRevenue.toLocaleString('vi-VN')} VND</strong>
                     </div>
                     <div className="detail-row">
-                      <span>Delivery margin revenue</span>
-                      <strong>{order.deliveryMarginRevenue.toLocaleString('vi-VN')} VND</strong>
+                      <span>Promoted listing revenue</span>
+                      <strong>{(order.promotedListingRevenue ?? 0).toLocaleString('vi-VN')} VND</strong>
                     </div>
                     <div className="detail-row">
-                      <span>Platform revenue</span>
-                      <strong>{order.platformRevenue.toLocaleString('vi-VN')} VND</strong>
+                      <span>Subscription revenue</span>
+                      <strong>{(order.subscriptionRevenue ?? 0).toLocaleString('vi-VN')} VND</strong>
                     </div>
                     <div className="detail-row">
                       <span>Contribution margin</span>
                       <strong>{order.contributionMargin.toLocaleString('vi-VN')} VND</strong>
+                    </div>
+                    <div className="detail-row">
+                      <span>Delivery route</span>
+                      <strong>
+                        {order.deliveryAddress?.district
+                          ? `${order.deliveryAddress.district} / ${order.deliveryAddress.ward}`
+                          : 'Campus pickup'}
+                      </strong>
                     </div>
                   </div>
                 ) : null}
@@ -276,7 +357,7 @@ export default function Admin() {
                 <dd>{BUSINESS_RULES.averageOrderValue.toLocaleString('vi-VN')} VND</dd>
               </div>
               <div>
-                <dt>Commission revenue</dt>
+                <dt>Baseline commission revenue</dt>
                 <dd>{(BUSINESS_RULES.averageOrderValue * BUSINESS_RULES.commissionRate).toLocaleString('vi-VN')} VND</dd>
               </div>
               <div>
@@ -284,16 +365,16 @@ export default function Admin() {
                 <dd>{(BUSINESS_RULES.deliveryCharge - BUSINESS_RULES.deliveryCost).toLocaleString('vi-VN')} VND</dd>
               </div>
               <div>
-                <dt>Payment processing</dt>
-                <dd>{BUSINESS_RULES.paymentFee.toLocaleString('vi-VN')} VND</dd>
+                <dt>Promoted listing revenue</dt>
+                <dd>{analytics.promotedListingRevenue.toLocaleString('vi-VN')} VND total</dd>
               </div>
               <div>
-                <dt>Operational handling</dt>
-                <dd>{BUSINESS_RULES.operationalCost.toLocaleString('vi-VN')} VND</dd>
+                <dt>Vendor subscription revenue</dt>
+                <dd>{analytics.subscriptionRevenue.toLocaleString('vi-VN')} VND total</dd>
               </div>
               <div>
-                <dt>Promotional subsidy</dt>
-                <dd>{BUSINESS_RULES.promotionalSubsidy.toLocaleString('vi-VN')} VND</dd>
+                <dt>Contribution margin</dt>
+                <dd>{analytics.contributionMargin.toLocaleString('vi-VN')} VND</dd>
               </div>
             </dl>
           </article>
@@ -304,15 +385,15 @@ export default function Admin() {
             <div className="stack compact-stack">
               <div className="strategy-card">
                 <strong>Selective commission uplift</strong>
-                <span>Premium vendors can move from 10% to 12-15% commission.</span>
+                <span>Premium vendors already use 12-14% commission tiers.</span>
               </div>
               <div className="strategy-card">
                 <strong>Batch delivery optimization</strong>
-                <span>Higher order density reduces per-route delivery cost.</span>
+                <span>{analytics.averageBatchSize} orders per batch improve route density.</span>
               </div>
               <div className="strategy-card">
                 <strong>Additional revenue streams</strong>
-                <span>Promoted listings and vendor subscriptions diversify revenue.</span>
+                <span>Promoted listings and subscriptions now contribute to platform revenue.</span>
               </div>
             </div>
           </article>
@@ -326,16 +407,14 @@ export default function Admin() {
               <article key={user.id} className="card user-row">
                 <div>
                   <h2>{user.name}</h2>
-                  <p className="support-copy">{user.email}</p>
+                  <p className="support-copy">
+                    {user.email} / {getCampusLabel(user.campusId)}
+                  </p>
                 </div>
                 <div className="user-metrics">
                   <span>{user.orders.length} orders</span>
-                  <span>
-                    {user.orders
-                      .reduce((sum, order) => sum + order.total, 0)
-                      .toLocaleString('vi-VN')}{' '}
-                    VND spent
-                  </span>
+                  <span>{user.loyaltyTier} / {user.loyaltyPoints} pts</span>
+                  <span>{user.acquisitionChannel}</span>
                 </div>
                 <button
                   type="button"
@@ -355,6 +434,97 @@ export default function Admin() {
               </Link>
             </article>
           )}
+        </section>
+      ) : null}
+
+      {activeTab === 'vendors' ? (
+        <section className="two-column-grid">
+          <article className="card">
+            <p className="eyebrow">Vendor Network</p>
+            <h2>Local supply and monetization tiers</h2>
+            <div className="stack compact-stack">
+              {analytics.vendorPerformance.map((vendor) => (
+                <div key={vendor.id} className="strategy-card">
+                  <strong>{vendor.name}</strong>
+                  <span>
+                    {vendor.subscriptionPlan} plan / {Math.round(vendor.commissionRate * 100)}% commission
+                  </span>
+                  <span>
+                    {vendor.orderCount} orders / {vendor.revenue.toLocaleString('vi-VN')} VND platform revenue
+                  </span>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="card">
+            <p className="eyebrow">Batch Queue</p>
+            <h2>Operational routing windows</h2>
+            <div className="stack compact-stack">
+              {batches.length ? (
+                batches.slice(0, 6).map((batch) => (
+                  <div key={batch.id} className="strategy-card">
+                    <strong>{batch.id}</strong>
+                    <span>
+                      {getCampusLabel(batch.campusId)} / {batch.totalOrders} orders / {batch.groupBuyUnits} grouped units
+                    </span>
+                    <span>
+                      {batch.district ? `${batch.district} / ${batch.ward}` : 'Campus pickup hub'}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <div className="strategy-card">
+                  <strong>No live batches yet</strong>
+                  <span>Batches will appear after the first order is submitted.</span>
+                </div>
+              )}
+            </div>
+          </article>
+        </section>
+      ) : null}
+
+      {activeTab === 'marketing' ? (
+        <section className="two-column-grid">
+          <article className="card">
+            <p className="eyebrow">Marketing Metrics</p>
+            <h2>Acquisition and retention measurement</h2>
+            <div className="stack compact-stack">
+              <div className="strategy-card">
+                <strong>Monthly marketing spend</strong>
+                <span>{analytics.marketingSpend.toLocaleString('vi-VN')} VND</span>
+              </div>
+              <div className="strategy-card">
+                <strong>Conversion rate</strong>
+                <span>{analytics.conversionRate}% of registered students have purchased</span>
+              </div>
+              <div className="strategy-card">
+                <strong>Retention rate proxy</strong>
+                <span>{analytics.retentionProxy}% repeat buyers</span>
+              </div>
+              <div className="strategy-card">
+                <strong>Loyalty usage</strong>
+                <span>{analytics.loyaltyUsageRate}% of students hold loyalty points</span>
+              </div>
+            </div>
+          </article>
+
+          <article className="card">
+            <p className="eyebrow">Growth Channels</p>
+            <h2>Referral and channel performance</h2>
+            <div className="stack compact-stack">
+              {Object.entries(marketingState.channels).map(([channel, share]) => (
+                <div key={channel} className="strategy-card">
+                  <strong>{channel}</strong>
+                  <span>{Math.round(share * 100)}% allocation share</span>
+                </div>
+              ))}
+              <div className="strategy-card">
+                <strong>Referral adoption</strong>
+                <span>{analytics.referralShare}% of students joined via referral code</span>
+              </div>
+            </div>
+          </article>
         </section>
       ) : null}
     </div>

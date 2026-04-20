@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ADVANCED_FEATURES } from '../constants/business';
 import { PRODUCTS, PRODUCT_CATEGORIES } from '../data/products';
-import { formatCountdown, getBatchCutoffDate } from '../lib/analytics';
+import { formatCountdown, getBatchCutoffDate, getCampusLabel } from '../lib/analytics';
 import { buildRecommendationFeed } from '../lib/recommendation';
+import { VENDOR_BY_ID } from '../data/vendors';
 import { useAuth } from '../context/useAuth';
 
 function useBatchCountdown() {
@@ -22,6 +23,8 @@ function useBatchCountdown() {
 }
 
 function ProductCard({ product, quantity, onChangeQuantity, onAddToCart }) {
+  const vendor = VENDOR_BY_ID[product.vendorId];
+
   return (
     <article className="card product-card">
       <div className="product-card-top">
@@ -40,12 +43,16 @@ function ProductCard({ product, quantity, onChangeQuantity, onAddToCart }) {
           <dd>{product.vendor}</dd>
         </div>
         <div>
+          <dt>Campus cluster</dt>
+          <dd>{product.campusIds.length} campuses</dd>
+        </div>
+        <div>
           <dt>Lead time</dt>
           <dd>{product.leadTime}</dd>
         </div>
         <div>
-          <dt>Campus demand</dt>
-          <dd>{product.campusDemand} orders</dd>
+          <dt>Commission tier</dt>
+          <dd>{Math.round((vendor?.commissionRate ?? 0.1) * 100)}%</dd>
         </div>
       </dl>
 
@@ -78,7 +85,8 @@ function ProductCard({ product, quantity, onChangeQuantity, onAddToCart }) {
 }
 
 export default function Home() {
-  const { user, getCart, saveCart, getOrders } = useAuth();
+  const { user, profile, platformMode, getCart, saveCart, getOrders, getAllUsersWithOrders } =
+    useAuth();
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
   const [quantities, setQuantities] = useState({});
@@ -86,14 +94,20 @@ export default function Home() {
   const countdown = useBatchCountdown();
 
   const orders = getOrders();
+  const allUsers = getAllUsersWithOrders();
+
+  const campusProducts = useMemo(
+    () => PRODUCTS.filter((product) => product.campusIds.includes(user?.campusId)),
+    [user?.campusId]
+  );
 
   const recommendations = useMemo(
-    () => buildRecommendationFeed(PRODUCTS, orders),
-    [orders]
+    () => buildRecommendationFeed(campusProducts, orders, profile, allUsers),
+    [campusProducts, orders, profile, allUsers]
   );
 
   const filteredProducts = useMemo(() => {
-    return PRODUCTS.filter((product) => {
+    return campusProducts.filter((product) => {
       const categoryMatches =
         selectedCategory === 'All' || product.category === selectedCategory;
       const query = searchTerm.trim().toLowerCase();
@@ -105,7 +119,12 @@ export default function Home() {
 
       return categoryMatches && searchMatches;
     });
-  }, [searchTerm, selectedCategory]);
+  }, [campusProducts, searchTerm, selectedCategory]);
+
+  const groupBuyCandidates = useMemo(
+    () => campusProducts.filter((product) => product.groupEligible).slice(0, 3),
+    [campusProducts]
+  );
 
   useEffect(() => {
     const syncSummary = () => {
@@ -151,21 +170,24 @@ export default function Home() {
       <section className="hero-grid">
         <div className="card hero-card">
           <p className="eyebrow">Student-Centered Marketplace</p>
-          <h1>CampusCart turns daily campus demand into faster, cheaper orders.</h1>
+          <h1>CampusCart turns multi-campus demand into faster, cheaper orders.</h1>
           <p className="hero-copy">
-            The platform combines pre-order batching, local vendors, tailored
-            recommendations, and analytics-led operations to support the business
-            model described in the project report.
+            The platform now combines campus-aware catalog routing, smart batch windows,
+            referral growth loops, loyalty tracking, and vendor tier monetization.
           </p>
 
           <div className="hero-actions">
             <div className="metric-pill">
-              <span>Current user</span>
-              <strong>{user?.name}</strong>
+              <span>Campus</span>
+              <strong>{getCampusLabel(user?.campusId)}</strong>
             </div>
             <div className="metric-pill">
-              <span>Orders placed</span>
-              <strong>{orders.length}</strong>
+              <span>Loyalty</span>
+              <strong>{profile?.loyaltyTier ?? 'Starter'}</strong>
+            </div>
+            <div className="metric-pill">
+              <span>Referral code</span>
+              <strong>{profile?.referralCode ?? '-'}</strong>
             </div>
             <div className="metric-pill">
               <span>Cart value</span>
@@ -175,7 +197,7 @@ export default function Home() {
         </div>
 
         <div className="card spotlight-card">
-          <p className="eyebrow">Batch Delivery</p>
+          <p className="eyebrow">Smart Batch Delivery</p>
           <h2>Next cut-off at 20:00</h2>
           <div className="countdown-grid">
             <div>
@@ -192,10 +214,45 @@ export default function Home() {
             </div>
           </div>
           <p className="support-copy">
-            Orders submitted before the cutoff are consolidated for same-day or
-            next-batch fulfillment, which matches the PDF requirement for
-            pre-order aggregation and local delivery efficiency.
+            Orders are grouped by campus, district, ward, and cutoff window. Group-buy
+            eligible items strengthen route density and improve delivery margin over time.
           </p>
+          <p className="support-copy">Runtime: {platformMode}</p>
+        </div>
+      </section>
+
+      <section className="section-block">
+        <div className="section-head">
+          <div>
+            <p className="eyebrow">Retention Loops</p>
+            <h2>Referral, loyalty, and group-buy drivers</h2>
+          </div>
+        </div>
+
+        <div className="feature-grid">
+          <article className="card feature-card">
+            <h3>Loyalty balance</h3>
+            <p>
+              <strong>Points:</strong> {profile?.loyaltyPoints ?? 0}
+            </p>
+            <p>
+              <strong>Tier:</strong> {profile?.loyaltyTier ?? 'Starter'}
+            </p>
+          </article>
+          <article className="card feature-card">
+            <h3>Referral growth</h3>
+            <p>
+              <strong>Your code:</strong> {profile?.referralCode ?? '-'}
+            </p>
+            <p>New referred students add loyalty points to both sides of the loop.</p>
+          </article>
+          <article className="card feature-card">
+            <h3>Group-buy priority</h3>
+            <p>
+              <strong>Eligible SKUs:</strong> {groupBuyCandidates.length}
+            </p>
+            <p>Batch-friendly products are highlighted to reduce route fragmentation.</p>
+          </article>
         </div>
       </section>
 
@@ -251,7 +308,7 @@ export default function Home() {
         <div className="section-head">
           <div>
             <p className="eyebrow">Catalog</p>
-            <h2>Localized vendor supply for student needs</h2>
+            <h2>Localized vendor supply for {getCampusLabel(user?.campusId)}</h2>
           </div>
           <div className="catalog-summary">
             <span>{filteredProducts.length} products shown</span>

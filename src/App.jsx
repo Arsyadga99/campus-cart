@@ -33,6 +33,8 @@ function AdminApp() {
         <Route path="/admin/orders"     element={<Admin />} />
         <Route path="/admin/economics"  element={<Admin />} />
         <Route path="/admin/users"      element={<Admin />} />
+        <Route path="/admin/vendors"    element={<Admin />} />
+        <Route path="/admin/marketing"  element={<Admin />} />
         <Route path="*"                 element={<Navigate to="/admin" replace />} />
       </Routes>
     </>

@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
+import { getCampusLabel } from '../lib/analytics';
 import { useAuth } from '../context/useAuth';
 
 export default function Orders() {
@@ -16,7 +17,7 @@ export default function Orders() {
         <section className="card empty-card">
           <p className="eyebrow">Order History</p>
           <h2>No orders have been placed yet</h2>
-          <p>The history page will track all student purchases once you place your first order.</p>
+          <p>The history page will track batches, addresses, and marketing context after checkout.</p>
           <Link to="/" className="primary-button">
             Browse catalog
           </Link>
@@ -32,7 +33,8 @@ export default function Orders() {
           <p className="eyebrow">Purchase History</p>
           <h1>Student order timeline</h1>
           <p className="support-copy">
-            Review what you ordered, when you ordered it, and the amount you paid.
+            Review what you ordered, when you ordered it, the batch assignment, and the
+            delivery cluster behind each order.
           </p>
         </div>
       </section>
@@ -49,8 +51,14 @@ export default function Orders() {
               </div>
               <div className="order-badge-block">
                 <span>{order.total.toLocaleString('vi-VN')} VND</span>
-                <small>{order.deliveryMethod}</small>
+                <small>{order.batchId}</small>
               </div>
+            </div>
+
+            <div className="compact-meta">
+              <span>{getCampusLabel(order.campusId)}</span>
+              <span>{order.deliveryMethod}</span>
+              <span>{order.batchWindow}</span>
             </div>
 
             <div className="order-item-list">
@@ -63,6 +71,13 @@ export default function Orders() {
                 </div>
               ))}
             </div>
+
+            <p className="support-copy">
+              Delivery cluster:{' '}
+              {order.deliveryAddress?.district
+                ? `${order.deliveryAddress.district}, ${order.deliveryAddress.ward}, ${order.deliveryAddress.street}`
+                : order.deliveryAddress?.street}
+            </p>
           </article>
         ))}
       </section>

@@ -75,6 +75,16 @@ export default function Navbar() {
                 label="Students"
                 active={location.pathname === '/admin/users'}
               />
+              <NavItem
+                to="/admin/vendors"
+                label="Vendors"
+                active={location.pathname === '/admin/vendors'}
+              />
+              <NavItem
+                to="/admin/marketing"
+                label="Marketing"
+                active={location.pathname === '/admin/marketing'}
+              />
             </>
           ) : null}
         </nav>
