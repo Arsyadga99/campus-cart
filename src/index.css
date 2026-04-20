@@ -78,33 +78,35 @@ p {
 
 .app-header-inner {
   display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: 0.75rem;
   align-items: center;
   justify-content: space-between;
-  padding: 1rem 0;
+  padding: 0.65rem 0;
 }
 
 .brand-title {
   font-family: 'Fraunces', serif;
-  font-size: 1.35rem;
+  font-size: 1.2rem;
   font-weight: 700;
 }
 
 .brand-subtitle {
   color: var(--text-faint);
-  font-size: 0.85rem;
+  font-size: 0.75rem;
 }
 
 .nav-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+  flex-wrap: nowrap;
+  gap: 0.25rem;
 }
 
 .nav-item {
-  padding: 0.65rem 0.95rem;
+  padding: 0.4rem 0.75rem;
   border-radius: 999px;
+  font-size: 0.85rem;
   color: var(--text-soft);
 }
 

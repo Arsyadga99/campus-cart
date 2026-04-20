@@ -3,12 +3,14 @@ import { AuthContext } from './auth-context';
 import { calculateCartPricing } from '../lib/analytics';
 import { loadJson, saveJson, simpleHash } from '../lib/storage';
 import { CAMPUSES } from '../data/campuses';
+import { PRODUCTS } from '../data/products';
 import { createOrderBatch, fetchBatches } from '../lib/api';
 
 const ADMIN_EMAIL = 'admin@campuscart.local';
 const ADMIN_PASSWORD_HASH = simpleHash('CampusCartAdmin2026');
 const KEY_USERS = 'cc_users';
 const KEY_SESSION = 'cc_session';
+const KEY_PRODUCTS = 'cc_products';
 
 function buildCartKey(userId) {
   return `cc_cart_${userId}`;
@@ -69,6 +71,9 @@ export function AuthProvider({ children }) {
 
   const getUsers = () => loadJson(KEY_USERS, []);
   const saveUsers = (users) => saveJson(KEY_USERS, users);
+
+  const getProducts = () => loadJson(KEY_PRODUCTS, PRODUCTS);
+  const saveProducts = (products) => saveJson(KEY_PRODUCTS, products);
 
   const startSession = (nextSession) => {
     saveJson(KEY_SESSION, nextSession);
@@ -313,6 +318,8 @@ export function AuthProvider({ children }) {
     getAllUsersWithOrders,
     getAllBatches,
     deleteStudent,
+    getProducts,
+    saveProducts,
     availableCampuses: CAMPUSES,
     platformMode: 'Mock cloud API over local persistence',
     adminCredentials: {

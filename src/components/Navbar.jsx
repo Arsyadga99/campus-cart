@@ -81,6 +81,11 @@ export default function Navbar() {
                 active={location.pathname === '/admin/vendors'}
               />
               <NavItem
+                to="/admin/inventory"
+                label="Inventory"
+                active={location.pathname === '/admin/inventory'}
+              />
+              <NavItem
                 to="/admin/marketing"
                 label="Marketing"
                 active={location.pathname === '/admin/marketing'}

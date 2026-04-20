@@ -6,6 +6,8 @@ import Home   from './pages/Home';
 import Cart   from './pages/Cart';
 import Orders from './pages/Orders';
 import Admin  from './pages/Admin';
+import ProductDetail from './pages/ProductDetail';
+import Inventory from './pages/Inventory';
 import Navbar from './components/Navbar';
 import FloatingCart from './components/FloatingCart';
 
@@ -17,6 +19,7 @@ function StudentApp() {
         <Route path="/"       element={<Home />} />
         <Route path="/cart"   element={<Cart />} />
         <Route path="/orders" element={<Orders />} />
+        <Route path="/product/:id" element={<ProductDetail />} />
         <Route path="*"       element={<Navigate to="/" replace />} />
       </Routes>
       <FloatingCart />
@@ -34,6 +37,7 @@ function AdminApp() {
         <Route path="/admin/economics"  element={<Admin />} />
         <Route path="/admin/users"      element={<Admin />} />
         <Route path="/admin/vendors"    element={<Admin />} />
+        <Route path="/admin/inventory"  element={<Inventory />} />
         <Route path="/admin/marketing"  element={<Admin />} />
         <Route path="*"                 element={<Navigate to="/admin" replace />} />
       </Routes>

@@ -128,17 +128,20 @@ export default function Admin() {
 
       {activeTab === 'overview' ? (
         <>
-          <section className="kpi-grid-v2">
-            <article className="card kpi-card-v2 kpi-card-hero">
+          <section className="two-column-grid" style={{ marginBottom: '1rem' }}>
+            <article className="card kpi-card-v2 kpi-card-hero" style={{ gridColumn: 'span 1' }}>
               <p className="eyebrow">Revenue This Month</p>
               <h3>{`${analytics.totalRevenueThisMonth.toLocaleString('vi-VN')} VND`}</h3>
               <p>Platform revenue booked in the current month</p>
             </article>
-            <KpiCard
-              label="Net Contribution This Month"
-              value={`${analytics.netContributionThisMonth.toLocaleString('vi-VN')} VND`}
-              helper="Monthly contribution margin after variable costs"
-            />
+            <article className="card kpi-card-v2 kpi-card-hero" style={{ gridColumn: 'span 1' }}>
+              <p className="eyebrow">Net Contribution This Month</p>
+              <h3>{`${analytics.netContributionThisMonth.toLocaleString('vi-VN')} VND`}</h3>
+              <p>Monthly contribution margin after variable costs</p>
+            </article>
+          </section>
+
+          <section className="kpi-grid-v2">
             <KpiCard
               label="Total Orders"
               value={analytics.totalOrders.toLocaleString()}

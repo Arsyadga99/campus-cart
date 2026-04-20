@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ADVANCED_FEATURES } from '../constants/business';
-import { PRODUCTS, PRODUCT_CATEGORIES } from '../data/products';
+import { PRODUCT_CATEGORIES } from '../data/products';
 import { formatCountdown, getBatchCutoffDate, getCampusLabel } from '../lib/analytics';
 import { buildRecommendationFeed } from '../lib/recommendation';
 import { VENDOR_BY_ID } from '../data/vendors';
@@ -73,19 +73,28 @@ function ProductCard({ product, quantity, onChangeQuantity, onAddToCart }) {
         </button>
       </div>
 
-      <button
-        type="button"
-        className="primary-button"
-        onClick={() => onAddToCart(product)}
-      >
-        Add to pre-order
-      </button>
+      <div className="button-row">
+        <button
+          type="button"
+          className="ghost-button"
+          onClick={() => window.location.href = `/product/${product.id}`}
+        >
+          View details
+        </button>
+        <button
+          type="button"
+          className="primary-button"
+          onClick={() => onAddToCart(product)}
+        >
+          Add to pre-order
+        </button>
+      </div>
     </article>
   );
 }
 
 export default function Home() {
-  const { user, profile, platformMode, getCart, saveCart, getOrders, getAllUsersWithOrders } =
+  const { user, profile, platformMode, getCart, saveCart, getOrders, getAllUsersWithOrders, getProducts } =
     useAuth();
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
@@ -97,8 +106,8 @@ export default function Home() {
   const allUsers = getAllUsersWithOrders();
 
   const campusProducts = useMemo(
-    () => PRODUCTS.filter((product) => product.campusIds.includes(user?.campusId)),
-    [user?.campusId]
+    () => getProducts().filter((product) => product.campusIds.includes(user?.campusId)),
+    [user?.campusId, getProducts]
   );
 
   const recommendations = useMemo(
