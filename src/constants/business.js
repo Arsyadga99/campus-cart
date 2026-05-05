@@ -66,11 +66,11 @@ export const KPI_TARGETS = [
 export const ADVANCED_FEATURES = [
   {
     id: 'ai-recommendation',
-    title: 'AI-Based Recommendation',
+    title: 'AI-Based Collaborative Filtering',
     importance:
       'Students make many small purchases, so faster product discovery has a direct impact on conversion and repeat orders.',
     impact:
-      'CampusCart ranks items by category affinity, order history, and campus demand so users reach relevant products with fewer search steps.',
+      'CampusCart learns from overlapping user purchase histories and recommends products bought by similar students, while still falling back to a lightweight rule-based backup when data is sparse.',
   },
   {
     id: 'analytics-dashboard',

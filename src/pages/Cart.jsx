@@ -40,7 +40,7 @@ function buildVietQrUrl({ amount, user, items }) {
 }
 
 export default function Cart() {
-  const { user, profile, getCart, saveCart, getOrders, addOrder } = useAuth();
+  const { user, profile, getCart, saveCart, getOrders, addOrder, payOrder } = useAuth();
   const [cartItems, setCartItems] = useState(() => getCart());
   const [deliveryMethod, setDeliveryMethod] = useState('pickup');
   const [paymentMethod, setPaymentMethod] = useState('cod');
@@ -125,7 +125,7 @@ export default function Cart() {
     });
   };
 
-  const placeOrder = () => {
+  const placeOrder = async () => {
     if (!cartItems.length) {
       return;
     }
@@ -136,7 +136,7 @@ export default function Cart() {
     }
 
     setAddressError('');
-    const order = addOrder({
+    const order = await addOrder({
       items: cartItems,
       deliveryMethod,
       paymentMethod,
@@ -158,6 +158,15 @@ export default function Cart() {
 
     setLastOrder(order);
     setCartItems([]);
+  };
+
+  const simulatePayment = async () => {
+    if (!lastOrder) {
+      return;
+    }
+
+    const paidOrder = await payOrder(lastOrder.id);
+    setLastOrder(paidOrder);
   };
 
   if (lastOrder) {
@@ -188,6 +197,10 @@ export default function Cart() {
               <span>Batch window</span>
               <strong>{lastOrder.batchWindow}</strong>
             </div>
+            <div className="summary-box">
+              <span>Payment status</span>
+              <strong>{lastOrder.payment_status}</strong>
+            </div>
           </div>
 
           <div className="button-row">
@@ -197,6 +210,11 @@ export default function Cart() {
             <Link to="/orders" className="secondary-button">
               Review orders
             </Link>
+            {lastOrder.payment_status !== 'paid' ? (
+              <button type="button" className="ghost-button" onClick={simulatePayment}>
+                Simulate payment
+              </button>
+            ) : null}
           </div>
         </section>
       </div>

@@ -6,9 +6,9 @@ import {
   BUSINESS_RULES,
   CAMPUS_PHASES,
 } from '../constants/business';
-import { getMarketingState, saveMarketingState } from '../lib/api';
 import { getCampusLabel, summarizeAnalytics } from '../lib/analytics';
 import { useAuth } from '../context/useAuth';
+import { fetchAiPerformance, getStoredToken } from '../lib/http';
 
 function resolveTab(pathname) {
   if (pathname === '/admin/orders') {
@@ -53,28 +53,58 @@ function DetailRow({ label, value, tone = 'neutral' }) {
   );
 }
 
+function MetricBar({ label, value, tone = 'neutral' }) {
+  const percent = Math.max(0, Math.min(100, Math.round(value * 100)));
+  return (
+    <div className="strategy-card ai-metric-bar">
+      <div className="ai-metric-row">
+        <strong>{label}</strong>
+        <span>{percent}%</span>
+      </div>
+      <div className="progress-rail ai-progress-rail">
+        <div className={`progress-fill ai-progress-fill ai-progress-${tone}`} style={{ width: `${percent}%` }} />
+      </div>
+    </div>
+  );
+}
+
 export default function Admin() {
   const location = useLocation();
   const activeTab = resolveTab(location.pathname);
-  const { getAllUsersWithOrders, getAllBatches, deleteStudent, platformMode } = useAuth();
+  const adminOrderStatuses = ['packed', 'shipped', 'delivered', 'cancelled'];
+  const {
+    role,
+    getAllUsersWithOrders,
+    deleteStudent,
+    platformMode,
+    saveMarketingState,
+    updateOrderStatus,
+    marketingState: marketingStateFromContext,
+    batches: batchesFromContext,
+  } = useAuth();
   const [expandedOrderId, setExpandedOrderId] = useState(null);
-  const [users, setUsers] = useState(() => getAllUsersWithOrders());
-  const [batches, setBatches] = useState([]);
-  const [marketingState, setMarketingState] = useState(() => getMarketingState());
+  const [orderStatusDrafts, setOrderStatusDrafts] = useState({});
+  const [aiPerformance, setAiPerformance] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState('');
+  const [aiLastRefreshed, setAiLastRefreshed] = useState(null);
+  const users = getAllUsersWithOrders();
+  const batches = [...(batchesFromContext ?? [])].sort((left, right) =>
+    right.cutoffAt.localeCompare(left.cutoffAt)
+  );
+  const marketingState = marketingStateFromContext;
+  const getAdminOrderStatus = (order) => {
+    const draftStatus = orderStatusDrafts[order.id];
+    if (adminOrderStatuses.includes(draftStatus)) {
+      return draftStatus;
+    }
 
-  useEffect(() => {
-    let cancelled = false;
+    if (adminOrderStatuses.includes(order.status)) {
+      return order.status;
+    }
 
-    getAllBatches().then((nextBatches) => {
-      if (!cancelled) {
-        setBatches(nextBatches.sort((left, right) => right.cutoffAt.localeCompare(left.cutoffAt)));
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [getAllBatches]);
+    return 'packed';
+  };
 
   const allOrders = useMemo(
     () =>
@@ -102,16 +132,59 @@ export default function Admin() {
 
   const handleDeleteStudent = (userId) => {
     deleteStudent(userId);
-    setUsers((current) => current.filter((user) => user.id !== userId));
   };
 
   const handleMarketingSpendChange = (value) => {
     const digitsOnly = value.replace(/[^\d]/g, '');
     const monthlySpend = digitsOnly ? Number(digitsOnly) : 0;
     const nextState = { ...marketingState, monthlySpend };
-    setMarketingState(nextState);
     saveMarketingState(nextState);
   };
+
+  const refreshAiPerformance = async () => {
+    setAiLoading(true);
+    setAiError('');
+    try {
+      const response = await fetchAiPerformance(getStoredToken());
+      setAiPerformance(response);
+      setAiLastRefreshed(new Date().toLocaleString('en-US'));
+    } catch (error) {
+      setAiError(error.message || 'Failed to load AI performance.');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (role !== 'admin') {
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      setAiLoading(true);
+      try {
+        const response = await fetchAiPerformance(getStoredToken());
+        if (!cancelled) {
+          setAiPerformance(response);
+          setAiLastRefreshed(new Date().toLocaleString('en-US'));
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setAiError(error.message || 'Failed to load AI performance.');
+        }
+      } finally {
+        if (!cancelled) {
+          setAiLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [role]);
 
   return (
     <div className="page-shell">
@@ -278,6 +351,97 @@ export default function Admin() {
               ))}
             </div>
           </section>
+
+          <section className="section-block">
+            <div className="section-head">
+              <div>
+                <p className="eyebrow">AI Performance</p>
+                <h2>based on user interaction data</h2>
+                <p className="support-copy">
+                  Live evaluation over recommendation logs and order outcomes.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={refreshAiPerformance}
+                disabled={aiLoading}
+              >
+                {aiLoading ? 'Refreshing...' : 'Refresh metrics'}
+              </button>
+            </div>
+
+            {aiLoading ? (
+              <article className="card empty-card">
+                <h2>Loading AI metrics...</h2>
+                <p>Fetching recommendation logs and order outcomes from the backend.</p>
+              </article>
+            ) : aiError ? (
+              <article className="card empty-card">
+                <h2>Unable to load AI metrics</h2>
+                <p>{aiError}</p>
+              </article>
+            ) : aiPerformance ? (
+              <>
+                <section className="kpi-grid-v2">
+                  <KpiCard
+                    label="Precision"
+                    value={`${Number(aiPerformance.precision * 100).toFixed(2)}%`}
+                    helper="Recommended items that were later purchased"
+                  />
+                  <KpiCard
+                    label="Recall"
+                    value={`${Number(aiPerformance.recall * 100).toFixed(2)}%`}
+                    helper="Purchased items captured by recommendations"
+                  />
+                  <KpiCard
+                    label="F1 Score"
+                    value={`${Number(aiPerformance.f1_score * 100).toFixed(2)}%`}
+                    helper="Balanced quality score for recommendation output"
+                  />
+                </section>
+
+                <section className="two-column-grid section-block">
+                  <article className="card">
+                    <p className="eyebrow">Recommendation Quality Trend</p>
+                    <h2>Mini score chart</h2>
+                    <div className="stack compact-stack">
+                      <MetricBar label="Precision" value={aiPerformance.precision} tone="positive" />
+                      <MetricBar label="Recall" value={aiPerformance.recall} tone="neutral" />
+                      <MetricBar label="F1 Score" value={aiPerformance.f1_score} tone="positive" />
+                    </div>
+                  </article>
+
+                  <article className="card">
+                    <p className="eyebrow">Activity Summary</p>
+                    <h2>Recommendation volume</h2>
+                    <p className="support-copy">
+                      Last refreshed: {aiLastRefreshed ?? '-'}
+                    </p>
+                    <div className="stack compact-stack">
+                      <div className="strategy-card">
+                        <strong>Total recommendation count</strong>
+                        <span>{aiPerformance.total_recommendations.toLocaleString()} items logged</span>
+                      </div>
+                      <div className="strategy-card">
+                        <strong>Total users</strong>
+                        <span>{aiPerformance.total_users.toLocaleString()} users in dataset</span>
+                      </div>
+                      <div className="strategy-card">
+                        <strong>Average recommendation per user</strong>
+                        <span>
+                          {(
+                            aiPerformance.total_recommendations /
+                            Math.max(1, aiPerformance.total_users)
+                          ).toFixed(2)} items / user
+                        </span>
+                      </div>
+                    </div>
+                  </article>
+                </section>
+              </>
+            ) : null}
+          </section>
         </>
       ) : null}
 
@@ -303,6 +467,7 @@ export default function Admin() {
                   <span>{order.deliveryMethod}</span>
                   <span>{order.campaignSource}</span>
                   <span>{order.batchWindow}</span>
+                  <span>{order.status}</span>
                 </div>
                 <div className="order-item-list">
                   {order.items.map((item) => (
@@ -313,6 +478,36 @@ export default function Admin() {
                       <span>{(item.quantity * item.price).toLocaleString('vi-VN')} VND</span>
                     </div>
                   ))}
+                </div>
+                <div className="option-group">
+                  <label>Order status</label>
+                  <div className="promo-row">
+                    <select
+                      value={getAdminOrderStatus(order)}
+                      onChange={(event) =>
+                        setOrderStatusDrafts((current) => ({
+                          ...current,
+                          [order.id]: event.target.value
+                        }))
+                      }
+                    >
+                      {adminOrderStatuses.map((status) => (
+                        <option key={status} value={status}>
+                          {status}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="primary-button compact"
+                      onClick={async () => {
+                        const nextStatus = orderStatusDrafts[order.id] ?? order.status;
+                        await updateOrderStatus(order.id, { status: nextStatus });
+                      }}
+                    >
+                      Update
+                    </button>
+                  </div>
                 </div>
                 <div className="admin-order-actions">
                   <button
@@ -377,6 +572,14 @@ export default function Admin() {
                           : 'Campus pickup'
                       }
                     />
+                    <DetailRow label="Payment status" value={order.payment_status} />
+                    <DetailRow label="Delivery status" value={order.delivery_status} />
+                    {order.deliveryMethod === 'delivery' ? (
+                      <DetailRow
+                        label="Courier"
+                        value={order.courier_name ?? 'Unassigned'}
+                      />
+                    ) : null}
                   </div>
                 ) : null}
               </article>

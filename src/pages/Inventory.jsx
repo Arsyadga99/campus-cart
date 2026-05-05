@@ -3,8 +3,7 @@ import { useAuth } from '../context/useAuth';
 import { PRODUCT_CATEGORIES } from '../data/products';
 
 export default function Inventory() {
-  const { getProducts, saveProducts } = useAuth();
-  const [products, setProducts] = useState(() => getProducts());
+  const { products, createProduct, updateProduct, deleteProduct } = useAuth();
   const [editingId, setEditingId] = useState(null);
   
   const defaultProduct = {
@@ -30,23 +29,18 @@ export default function Inventory() {
     setFormData(product);
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (!confirm('Are you sure you want to delete this product?')) return;
-    const nextProducts = products.filter(p => p.id !== id);
-    setProducts(nextProducts);
-    saveProducts(nextProducts);
+    await deleteProduct(id);
   };
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
-    let nextProducts;
     if (editingId) {
-      nextProducts = products.map(p => p.id === editingId ? formData : p);
+      await updateProduct(editingId, formData);
     } else {
-      nextProducts = [formData, ...products];
+      await createProduct(formData);
     }
-    setProducts(nextProducts);
-    saveProducts(nextProducts);
     setEditingId(null);
     setFormData({ ...defaultProduct, id: `p-custom-${Date.now()}` });
   };

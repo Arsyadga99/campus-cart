@@ -811,6 +811,38 @@ select {
   background: linear-gradient(90deg, var(--gold), var(--accent));
 }
 
+.ai-metric-bar {
+  gap: 0.65rem;
+}
+
+.ai-metric-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.ai-metric-row span {
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.ai-progress-rail {
+  height: 0.65rem;
+}
+
+.ai-progress-fill {
+  transition: width 220ms ease;
+}
+
+.ai-progress-positive {
+  background: linear-gradient(90deg, #2f855a, #68d391);
+}
+
+.ai-progress-neutral {
+  background: linear-gradient(90deg, #3056d3, #7ea0ff);
+}
+
 .phase-row,
 .strategy-card,
 .auth-feature {

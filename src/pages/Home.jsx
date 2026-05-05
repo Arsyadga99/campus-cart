@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { ADVANCED_FEATURES } from '../constants/business';
 import { PRODUCT_CATEGORIES } from '../data/products';
 import { formatCountdown, getBatchCutoffDate, getCampusLabel } from '../lib/analytics';
-import { buildRecommendationFeed } from '../lib/recommendation';
 import { VENDOR_BY_ID } from '../data/vendors';
 import { useAuth } from '../context/useAuth';
 
@@ -94,25 +93,25 @@ function ProductCard({ product, quantity, onChangeQuantity, onAddToCart }) {
 }
 
 export default function Home() {
-  const { user, profile, platformMode, getCart, saveCart, getOrders, getAllUsersWithOrders, getProducts } =
-    useAuth();
+  const {
+    user,
+    profile,
+    platformMode,
+    getCart,
+    saveCart,
+    getOrders,
+    getProducts,
+    recommendations,
+  } = useAuth();
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
   const [quantities, setQuantities] = useState({});
   const [cartSummary, setCartSummary] = useState({ items: 0, total: 0 });
   const countdown = useBatchCountdown();
 
-  const orders = getOrders();
-  const allUsers = getAllUsersWithOrders();
-
   const campusProducts = useMemo(
     () => getProducts().filter((product) => product.campusIds.includes(user?.campusId)),
     [user?.campusId, getProducts]
-  );
-
-  const recommendations = useMemo(
-    () => buildRecommendationFeed(campusProducts, orders, profile, allUsers),
-    [campusProducts, orders, profile, allUsers]
   );
 
   const filteredProducts = useMemo(() => {
@@ -269,7 +268,7 @@ export default function Home() {
         <div className="section-head">
           <div>
             <p className="eyebrow">Advanced Features</p>
-            <h2>E-commerce 4.0 features implemented in the product</h2>
+            <h2>Rule-based features implemented in the product</h2>
           </div>
         </div>
 
@@ -292,7 +291,7 @@ export default function Home() {
         <div className="section-head">
           <div>
             <p className="eyebrow">AI Recommendation</p>
-            <h2>Recommended for your campus routine</h2>
+            <h2>Recommended from similar student behavior</h2>
           </div>
         </div>
 

@@ -1,10 +1,11 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getCampusLabel } from '../lib/analytics';
 import { useAuth } from '../context/useAuth';
 
 export default function Orders() {
-  const { getOrders } = useAuth();
+  const { getOrders, payOrder } = useAuth();
+  const [payingOrderId, setPayingOrderId] = useState(null);
 
   const orders = useMemo(
     () => [...getOrders()].sort((left, right) => right.createdAt.localeCompare(left.createdAt)),
@@ -59,6 +60,7 @@ export default function Orders() {
               <span>{getCampusLabel(order.campusId)}</span>
               <span>{order.deliveryMethod}</span>
               <span>{order.batchWindow}</span>
+              <span>{order.status}</span>
             </div>
 
             <div className="order-item-list">
@@ -72,12 +74,28 @@ export default function Orders() {
               ))}
             </div>
 
-            <p className="support-copy">
-              Delivery cluster:{' '}
-              {order.deliveryAddress?.district
-                ? `${order.deliveryAddress.district}, ${order.deliveryAddress.ward}, ${order.deliveryAddress.street}`
-                : order.deliveryAddress?.street}
-            </p>
+            {order.payment_status !== 'paid' ? (
+              <button
+                type="button"
+                className="primary-button compact"
+                disabled={payingOrderId === order.id}
+                onClick={async () => {
+                  setPayingOrderId(order.id);
+                  try {
+                    await payOrder(order.id);
+                  } finally {
+                    setPayingOrderId(null);
+                  }
+                }}
+              >
+                {payingOrderId === order.id ? 'Processing payment...' : 'Simulate payment'}
+              </button>
+            ) : (
+              <p className="support-copy">Payment confirmed</p>
+            )}
+            {order.deliveryMethod === 'delivery' && order.courier_name ? (
+              <p className="support-copy">Courier: {order.courier_name}</p>
+            ) : null}
           </article>
         ))}
       </section>

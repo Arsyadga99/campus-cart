@@ -78,15 +78,15 @@ export function calculateCartPricing(cartItems, deliveryMethod, promoDiscount = 
 }
 
 export function getCurrentPhase(orderCount, activeCampusCount) {
-  if (activeCampusCount >= 10 || orderCount >= 20000) {
+  if (activeCampusCount >= 10 && orderCount >= 20000) {
     return CAMPUS_PHASES[3];
   }
 
-  if (activeCampusCount >= 8 || orderCount >= 10000) {
+  if (activeCampusCount >= 8 && orderCount >= 10000) {
     return CAMPUS_PHASES[2];
   }
 
-  if (activeCampusCount >= 3 || orderCount >= 3000) {
+  if (activeCampusCount >= 3 && orderCount >= 3000) {
     return CAMPUS_PHASES[1];
   }
 

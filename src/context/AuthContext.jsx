@@ -1,182 +1,348 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AuthContext } from './auth-context';
-import { calculateCartPricing } from '../lib/analytics';
-import { loadJson, saveJson, simpleHash } from '../lib/storage';
 import { CAMPUSES } from '../data/campuses';
-import { PRODUCTS } from '../data/products';
-import { createOrderBatch, fetchBatches } from '../lib/api';
+import { PRODUCTS as FALLBACK_PRODUCTS } from '../data/products';
+import {
+  createOrder,
+  createProduct,
+  decodeJwt,
+  deleteProduct,
+  deleteUser,
+  fetchBatches,
+  fetchMarketing,
+  fetchMe,
+  fetchOrders,
+  fetchProducts,
+  fetchRecommendations,
+  fetchUsers,
+  getStoredToken,
+  loginRequest,
+  payOrder,
+  registerRequest,
+  saveMarketing,
+  setStoredToken,
+  updateOrderStatus,
+  updateProduct
+} from '../lib/http';
 
-const ADMIN_EMAIL = 'admin@campuscart.local';
-const ADMIN_PASSWORD_HASH = simpleHash('CampusCartAdmin2026');
-const KEY_USERS = 'cc_users';
-const KEY_SESSION = 'cc_session';
-const KEY_PRODUCTS = 'cc_products';
-
-function buildCartKey(userId) {
-  return `cc_cart_${userId}`;
-}
-
-function buildOrdersKey(userId) {
-  return `cc_orders_${userId}`;
-}
-
-function makeReferralCode(name) {
-  return `${name.replace(/\s+/g, '').slice(0, 4).toUpperCase()}${Math.floor(
-    100 + Math.random() * 900
-  )}`;
-}
-
-function createStudentProfile({
-  name,
-  email,
-  password,
-  campusId,
-  acquisitionChannel,
-  referralCodeUsed,
-}) {
-  const referralCode = makeReferralCode(name.trim());
-
-  return {
-    id: `student_${Date.now()}`,
-    name: name.trim(),
-    email: email.trim().toLowerCase(),
-    passwordHash: simpleHash(password),
-    campusId,
-    acquisitionChannel,
-    referralCode,
-    referralCodeUsed: referralCodeUsed?.trim().toUpperCase() || null,
-    loyaltyPoints: 0,
-    loyaltyTier: 'Starter',
-    groupBuyOrders: 0,
-    createdAt: new Date().toISOString(),
-    lastOrderAt: null,
-    totalOrders: 0,
-  };
-}
+const DEFAULT_MARKETING = {
+  monthlySpend: 8000000,
+  channels: {
+    referral: 0.22,
+    tiktok: 0.31,
+    facebook: 0.18,
+    ambassador: 0.19,
+    organic: 0.1
+  }
+};
 
 function toSession(user) {
+  if (!user) {
+    return null;
+  }
+
   return {
     id: user.id,
     name: user.name,
     email: user.email,
-    campusId: user.campusId,
-    referralCode: user.referralCode,
-    role: 'student',
+    campusId: user.campusId ?? null,
+    referralCode: user.referralCode ?? null,
+    role: user.role ?? 'student',
+    loyaltyPoints: user.loyaltyPoints ?? 0,
+    loyaltyTier: user.loyaltyTier ?? 'Starter',
+    acquisitionChannel: user.acquisitionChannel ?? null
   };
 }
 
+function normalizeSessionFromToken(token) {
+  const payload = decodeJwt(token);
+  return payload
+    ? {
+        id: payload.id,
+        name: payload.name,
+        email: payload.email,
+        campusId: payload.campusId ?? null,
+        referralCode: payload.referralCode ?? null,
+        role: payload.role ?? null
+      }
+    : null;
+}
+
 export function AuthProvider({ children }) {
-  const [session, setSession] = useState(() => loadJson(KEY_SESSION, null));
-  const [batchesVersion, setBatchesVersion] = useState(0);
+  const initialToken = getStoredToken();
+  const [token, setToken] = useState(initialToken);
+  const [session, setSession] = useState(() => normalizeSessionFromToken(initialToken));
+  const [products, setProducts] = useState(FALLBACK_PRODUCTS);
+  const [orders, setOrders] = useState([]);
+  const [recommendations, setRecommendations] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [batches, setBatches] = useState([]);
+  const [marketingState, setMarketingState] = useState(DEFAULT_MARKETING);
+  const [cart, setCart] = useState([]);
 
-  const getUsers = () => loadJson(KEY_USERS, []);
-  const saveUsers = (users) => saveJson(KEY_USERS, users);
-
-  const getProducts = () => loadJson(KEY_PRODUCTS, PRODUCTS);
-  const saveProducts = (products) => saveJson(KEY_PRODUCTS, products);
-
-  const startSession = (nextSession) => {
-    saveJson(KEY_SESSION, nextSession);
-    setSession(nextSession);
+  const clearSessionData = () => {
+    setOrders([]);
+    setRecommendations([]);
+    setUsers([]);
+    setBatches([]);
+    setMarketingState(DEFAULT_MARKETING);
+    setCart([]);
   };
 
-  const register = ({
-    name,
-    email,
-    password,
-    campusId,
-    acquisitionChannel,
-    referralCodeUsed,
-  }) => {
-    if (
-      !name.trim() ||
-      !email.trim() ||
-      !password.trim() ||
-      !campusId ||
-      !acquisitionChannel
-    ) {
-      return { success: false, error: 'All registration fields are required.' };
-    }
-
-    const users = getUsers();
-    const normalizedEmail = email.trim().toLowerCase();
-
-    if (users.some((user) => user.email === normalizedEmail)) {
-      return { success: false, error: 'This email is already registered.' };
-    }
-
-    const normalizedReferral = referralCodeUsed?.trim().toUpperCase();
-    if (
-      normalizedReferral &&
-      !users.some((user) => user.referralCode === normalizedReferral)
-    ) {
-      return { success: false, error: 'Referral code was not found.' };
-    }
-
-    const student = createStudentProfile({
-      name,
-      email,
-      password,
-      campusId,
-      acquisitionChannel,
-      referralCodeUsed,
-    });
-
-    saveUsers([...users, student]);
-    startSession(toSession(student));
-
-    return { success: true };
+  const refreshPublicProducts = async () => {
+    const data = await fetchProducts();
+    setProducts(data.products ?? []);
+    return data.products ?? [];
   };
 
-  const login = (email, password) => {
-    const normalizedEmail = email.trim().toLowerCase();
-    const passwordHash = simpleHash(password);
-
-    if (normalizedEmail === ADMIN_EMAIL && passwordHash === ADMIN_PASSWORD_HASH) {
-      startSession({
-        id: 'admin',
-        name: 'CampusCart Admin',
-        email: ADMIN_EMAIL,
-        role: 'admin',
-      });
-
-      return { success: true };
-    }
-
-    const user = getUsers().find(
-      (entry) =>
-        entry.email === normalizedEmail && entry.passwordHash === passwordHash
-    );
-
-    if (!user) {
-      return { success: false, error: 'Incorrect email or password.' };
-    }
-
-    startSession(toSession(user));
-
-    return { success: true };
-  };
-
-  const logout = () => {
-    localStorage.removeItem(KEY_SESSION);
-    setSession(null);
-  };
-
-  const getCart = (userId = session?.id) => {
-    if (!userId) {
-      return [];
-    }
-
-    return loadJson(buildCartKey(userId), []);
-  };
-
-  const saveCart = (cartItems, userId = session?.id) => {
-    if (!userId) {
+  const refreshAuthenticatedData = async (currentToken, currentSession) => {
+    if (!currentToken) {
+      clearSessionData();
       return;
     }
 
-    saveJson(buildCartKey(userId), cartItems);
+    if (currentSession?.role !== 'admin') {
+      setUsers([]);
+      setBatches([]);
+      setMarketingState(DEFAULT_MARKETING);
+    }
+
+    const [ordersData, recommendationsData] = await Promise.all([
+      fetchOrders(currentToken),
+      fetchRecommendations(currentToken).catch(() => ({ recommendations: [] }))
+    ]);
+
+    setOrders(ordersData.orders ?? []);
+    setRecommendations(recommendationsData.recommendations ?? []);
+
+    if (currentSession?.role === 'admin') {
+      const [usersData, batchesData, marketingData] = await Promise.all([
+        fetchUsers(currentToken),
+        fetchBatches(currentToken),
+        fetchMarketing(currentToken)
+      ]);
+
+      setUsers(usersData.users ?? []);
+      setBatches(batchesData.batches ?? []);
+      setMarketingState(marketingData.marketing ?? DEFAULT_MARKETING);
+      return;
+    }
+
+    try {
+      const meData = await fetchMe(currentToken);
+      const fullSession = toSession(meData.user ?? currentSession);
+      if (fullSession) {
+        setSession(fullSession);
+      }
+    } catch {
+      clearSessionData();
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const productsData = await fetchProducts();
+        if (!cancelled) {
+          setProducts(productsData.products ?? FALLBACK_PRODUCTS);
+        }
+      } catch {
+        if (!cancelled) {
+          setProducts(FALLBACK_PRODUCTS);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      if (!token) {
+        clearSessionData();
+        setSession(null);
+        setStoredToken('');
+        return;
+      }
+
+      try {
+        const meData = await fetchMe(token);
+        const fullSession = toSession(meData.user);
+        if (cancelled) {
+          return;
+        }
+
+        setSession(fullSession);
+        await refreshAuthenticatedData(token, fullSession);
+      } catch {
+        if (cancelled) {
+          return;
+        }
+
+        setStoredToken('');
+        setToken('');
+        setSession(null);
+        clearSessionData();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  const bootstrapAfterAuth = async (nextToken, fallbackSession) => {
+    setStoredToken(nextToken);
+    setToken(nextToken);
+
+    const meData = await fetchMe(nextToken).catch(() => null);
+    const nextSession = toSession(meData?.user ?? fallbackSession);
+    if (nextSession) {
+      setSession(nextSession);
+      await refreshAuthenticatedData(nextToken, nextSession);
+    }
+
+    return nextSession;
+  };
+
+  const register = async (payload) => {
+    try {
+      const response = await registerRequest(payload);
+      await bootstrapAfterAuth(response.token, response.user);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  };
+
+  const login = async (email, password) => {
+    try {
+      const response = await loginRequest({ email, password });
+      await bootstrapAfterAuth(response.token, response.user);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  };
+
+  const logout = () => {
+    setStoredToken('');
+    setToken('');
+    setSession(null);
+    clearSessionData();
+  };
+
+  const getCart = () => cart;
+
+  const saveCart = (nextCart) => {
+    setCart(nextCart);
     window.dispatchEvent(new Event('cartUpdated'));
+  };
+
+  const getProducts = () => products;
+
+  const syncProducts = async (nextProducts) => {
+    if (!session?.role || session.role !== 'admin') {
+      setProducts(nextProducts);
+      return nextProducts;
+    }
+
+    const currentMap = new Map(products.map((product) => [product.id, product]));
+    const nextMap = new Map(nextProducts.map((product) => [product.id, product]));
+    const tokenValue = getStoredToken();
+
+    for (const [id, product] of nextMap.entries()) {
+      if (!currentMap.has(id)) {
+        await createProduct(product, tokenValue);
+        continue;
+      }
+
+      const current = currentMap.get(id);
+      if (JSON.stringify(current) !== JSON.stringify(product)) {
+        await updateProduct(id, product, tokenValue);
+      }
+    }
+
+    for (const id of currentMap.keys()) {
+      if (!nextMap.has(id)) {
+        await deleteProduct(id, tokenValue);
+      }
+    }
+
+    const refreshed = await refreshPublicProducts();
+    return refreshed;
+  };
+
+  const saveProducts = async (nextProducts) => syncProducts(nextProducts);
+
+  const createProductRecord = async (payload) => {
+    const response = await createProduct(payload, getStoredToken());
+    setProducts(response.products ?? []);
+    return response.product;
+  };
+
+  const updateProductRecord = async (productId, payload) => {
+    const response = await updateProduct(productId, payload, getStoredToken());
+    setProducts(response.products ?? []);
+    return response.product;
+  };
+
+  const deleteProductRecord = async (productId) => {
+    await deleteProduct(productId, getStoredToken());
+    setProducts((current) => current.filter((product) => product.id !== productId));
+  };
+
+  const refreshOrders = async () => {
+    if (!token) {
+      setOrders([]);
+      return [];
+    }
+
+    const data = await fetchOrders(token);
+    setOrders(data.orders ?? []);
+    return data.orders ?? [];
+  };
+
+  const addOrder = async (payload) => {
+    const response = await createOrder(payload, getStoredToken());
+    await refreshOrders();
+    await refreshPublicProducts();
+    if (session?.role === 'admin') {
+      await refreshAuthenticatedData(token, session);
+    } else {
+      try {
+        const recommendationsData = await fetchRecommendations(getStoredToken());
+        setRecommendations(recommendationsData.recommendations ?? []);
+      } catch {
+        setRecommendations([]);
+      }
+    }
+    saveCart([]);
+    return response.order;
+  };
+
+  const payOrderRecord = async (orderId) => {
+    const response = await payOrder(orderId, getStoredToken());
+    await refreshOrders();
+    if (session?.role === 'admin') {
+      await refreshAuthenticatedData(token, session);
+    }
+    return response.order;
+  };
+
+  const updateOrderStatusRecord = async (orderId, statusPayload) => {
+    const response = await updateOrderStatus(orderId, statusPayload, getStoredToken());
+    await refreshOrders();
+    if (session?.role === 'admin') {
+      await refreshAuthenticatedData(token, session);
+    }
+    return response.order;
   };
 
   const getOrders = (userId = session?.id) => {
@@ -184,148 +350,96 @@ export function AuthProvider({ children }) {
       return [];
     }
 
-    return loadJson(buildOrdersKey(userId), []);
-  };
-
-  const updateUserStatsAfterOrder = (order) => {
-    const users = getUsers();
-    const nextUsers = users.map((user) => {
-      if (user.id === session.id) {
-        const totalOrders = user.totalOrders + 1;
-        const loyaltyPoints = user.loyaltyPoints + Math.floor(order.total / 5000);
-
-        return {
-          ...user,
-          loyaltyPoints,
-          loyaltyTier:
-            loyaltyPoints >= 60 ? 'Gold' : loyaltyPoints >= 25 ? 'Silver' : 'Starter',
-          totalOrders,
-          lastOrderAt: order.createdAt,
-          groupBuyOrders: user.groupBuyOrders + (order.groupBuyQualified ? 1 : 0),
-        };
-      }
-
-      if (user.referralCode === order.referralCodeUsed) {
-        return {
-          ...user,
-          loyaltyPoints: user.loyaltyPoints + 5,
-        };
-      }
-
-      return user;
-    });
-
-    saveUsers(nextUsers);
-    if (session.role === 'student') {
-      const currentUser = nextUsers.find((user) => user.id === session.id);
-      if (currentUser) {
-        startSession(toSession(currentUser));
-      }
+    if (session?.role === 'admin' && !userId) {
+      return orders;
     }
+
+    if (session?.role === 'admin' && userId === session.id) {
+      return orders;
+    }
+
+    return orders.filter((order) => order.userId === userId);
   };
 
-  const addOrder = ({
-    items,
-    deliveryMethod,
-    paymentMethod,
-    promoDiscount,
-    promoCode,
-    deliveryAddress,
-    campaignSource,
-  }) => {
-    if (!session?.id) {
+  const getAllUsersWithOrders = () => {
+    const ordersByUser = orders.reduce((acc, order) => {
+      if (!acc[order.userId]) {
+        acc[order.userId] = [];
+      }
+
+      acc[order.userId].push(order);
+      return acc;
+    }, {});
+
+    return users.map((user) => ({
+      ...user,
+      campus: CAMPUSES.find((campus) => campus.id === user.campusId) ?? null,
+      orders: ordersByUser[user.id] ?? []
+    }));
+  };
+
+  const getAllBatches = async () => {
+    if (session?.role !== 'admin') {
+      return [];
+    }
+
+    return batches;
+  };
+
+  const deleteStudent = async (userId) => {
+    await deleteUser(userId, getStoredToken());
+    await refreshAuthenticatedData(getStoredToken(), session);
+  };
+
+  const saveMarketingStateRecord = async (nextState) => {
+    const response = await saveMarketing(nextState, getStoredToken());
+    setMarketingState(response.marketing ?? nextState);
+    return response.marketing ?? nextState;
+  };
+
+  const currentUserProfile = useMemo(() => {
+    if (!session) {
       return null;
     }
 
-    const pricing = calculateCartPricing(items, deliveryMethod, promoDiscount);
-    const groupBuyQualified = items.some((item) => item.groupEligible && item.quantity >= 2);
-    const order = {
-      id: `ORD-${Math.floor(100000 + Math.random() * 900000)}`,
-      studentId: session.id,
-      campusId: session.campusId,
-      items,
-      ...pricing,
-      paymentMethod,
-      deliveryMethod,
-      promoDiscount,
-      promoCode,
-      deliveryAddress,
-      campaignSource,
-      referralCodeUsed:
-        getUsers().find((user) => user.id === session.id)?.referralCodeUsed ?? null,
-      groupBuyQualified,
-      createdAt: new Date().toISOString(),
-    };
-
-    const batch = createOrderBatch({
-      campusId: session.campusId,
-      district: deliveryMethod === 'delivery' ? deliveryAddress?.district : null,
-      ward: deliveryMethod === 'delivery' ? deliveryAddress?.ward : null,
-      order,
-    });
-
-    order.batchId = batch.id;
-    order.batchWindow = batch.windowLabel;
-
-    saveJson(buildOrdersKey(session.id), [...getOrders(), order]);
-    updateUserStatsAfterOrder(order);
-    saveCart([]);
-    setBatchesVersion((value) => value + 1);
-    return order;
-  };
-
-  const getAllUsersWithOrders = () =>
-    getUsers().map((user) => ({
-      ...user,
-      campus: CAMPUSES.find((campus) => campus.id === user.campusId) ?? null,
-      orders: getOrders(user.id),
-    }));
-
-  const getAllBatches = () => {
-    void batchesVersion;
-    return fetchBatches();
-  };
-
-  const deleteStudent = (userId) => {
-    const users = getUsers();
-    const nextUsers = users.filter((user) => user.id !== userId);
-
-    saveUsers(nextUsers);
-    localStorage.removeItem(buildCartKey(userId));
-    localStorage.removeItem(buildOrdersKey(userId));
-
-    if (session?.id === userId) {
-      logout();
-    }
-  };
-
-  const currentUserProfile = useMemo(
-    () => getUsers().find((user) => user.id === session?.id) ?? null,
-    [session]
-  );
+    return users.find((user) => user.id === session.id) ?? session;
+  }, [session, users]);
 
   const contextValue = {
     user: session,
     role: session?.role ?? null,
     profile: currentUserProfile,
+    products,
+    orders,
+    recommendations,
+    users,
+    batches,
+    marketingState,
     register,
     login,
     logout,
     getCart,
     saveCart,
+    getProducts,
+    saveProducts,
+    createProduct: createProductRecord,
+    updateProduct: updateProductRecord,
+    deleteProduct: deleteProductRecord,
     getOrders,
     addOrder,
+    payOrder: payOrderRecord,
+    updateOrderStatus: updateOrderStatusRecord,
     getAllUsersWithOrders,
     getAllBatches,
     deleteStudent,
-    getProducts,
-    saveProducts,
+    saveMarketingState: saveMarketingStateRecord,
+    refreshOrders,
     availableCampuses: CAMPUSES,
-    platformMode: 'Mock cloud API over local persistence',
+    platformMode: 'Express API over JSON database',
     adminCredentials: {
-      email: ADMIN_EMAIL,
-      passwordHint: 'CampusCartAdmin2026',
-    },
+      email: 'admin@campuscart.local',
+      passwordHint: 'CampusCartAdmin2026'
+    }
   };
 
   return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>;
