@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ADVANCED_FEATURES } from '../constants/business';
 import { PRODUCT_CATEGORIES } from '../data/products';
 import { formatCountdown, getBatchCutoffDate, getCampusLabel } from '../lib/analytics';
 import { VENDOR_BY_ID } from '../data/vendors';
@@ -264,28 +263,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="section-block">
-        <div className="section-head">
-          <div>
-            <p className="eyebrow">Advanced Features</p>
-            <h2>Rule-based features implemented in the product</h2>
-          </div>
-        </div>
 
-        <div className="feature-grid">
-          {ADVANCED_FEATURES.map((feature) => (
-            <article key={feature.id} className="card feature-card">
-              <h3>{feature.title}</h3>
-              <p>
-                <strong>Why it matters:</strong> {feature.importance}
-              </p>
-              <p>
-                <strong>How it helps:</strong> {feature.impact}
-              </p>
-            </article>
-          ))}
-        </div>
-      </section>
 
       <section className="section-block">
         <div className="section-head">
@@ -306,6 +284,22 @@ export default function Home() {
               <div className="compact-meta">
                 <span>{product.vendor}</span>
                 <span>{product.price.toLocaleString('vi-VN')} VND</span>
+              </div>
+              <div className="button-row">
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => window.location.href = `/product/${product.id}`}
+                >
+                  View details
+                </button>
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => addToCart(product)}
+                >
+                  Add to pre-order
+                </button>
               </div>
             </article>
           ))}
